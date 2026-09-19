@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#090e1d">
+  <link rel="icon" href="data:,">
+  <title>Webline — City Swing</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="game.js" defer></script>
+</head>
+<body>
+  <main class="game-shell" aria-label="Webline city swinging game">
+    <canvas id="game" aria-label="Side scrolling city game. Hold Space, mouse, or touch to swing."></canvas>
+    <header class="hud">
+      <div class="brand"><span class="brand-mark">◆</span> WEBLINE <span class="brand-sub">CITY SWING</span></div>
+      <div class="scores"><div><span class="label">DISTANCE</span><strong id="score">0000</strong></div><div><span class="label">BEST</span><strong id="best">0000</strong></div></div>
+    </header>
+    <div class="hint" id="hint"><span class="key">SPACE</span> / HOLD TO WEB <span class="dot">·</span> RELEASE TO FLY</div>
+    <div class="death-screen" id="death" hidden>
+      <div class="death-card"><span class="eyebrow">RUN ENDED</span><h1>One more swing?</h1><p>Distance <strong id="final-score">0</strong></p><div class="restart-note">Press Space, click, or tap to restart</div></div>
+    </div>
+  </main>
+</body>
+</html>
