@@ -85,9 +85,14 @@
     flash = 0;
     retryAt = 0;
     accumulator = 0;
-    player = { x: 116, y: H * 0.43, px: 116, py: H * 0.43, vx: TUNE.horizontalStartingSpeed, vy: 0, grounded: false, landingTimer: 0, tumbleTimer: 0, tumbleAngle: 0, pose: null };
-    buildings.push(makeBuilding(-260, 600, H * 0.77, 0));
-    nextBuildingX = 340 + rand(...TUNE.buildingSpacing);
+    // A safe runway gives the player time to try Jump or web before the first gap.
+    const startingRoof = makeBuilding(-260, 1180, H * 0.72, 0);
+    const mastY = startingRoof.top - Math.min(250, H * 0.28);
+    startingRoof.anchors[0] = { x: 276, y: mastY };
+    startingRoof.anchors[1] = { x: startingRoof.x + startingRoof.w - 150, y: mastY };
+    buildings.push(startingRoof);
+    player = { x: 116, y: startingRoof.top - TUNE.playerRadius, px: 116, py: startingRoof.top - TUNE.playerRadius, vx: TUNE.horizontalStartingSpeed, vy: 0, grounded: true, landingTimer: 0, tumbleTimer: 0, tumbleAngle: 0, pose: null };
+    nextBuildingX = startingRoof.x + startingRoof.w + rand(...TUNE.buildingSpacing);
     generateAhead();
     scoreNode.textContent = '0000';
     deathNode.hidden = true;
@@ -156,7 +161,7 @@
     const point = findAnchor();
     if (!point) return;
     rope = { x: point.x, y: point.y, length: point.length * 0.985 };
-    player.grounded = false;
+    // Ground contact persists until movement actually lifts the player, so Space + V can jump.
     burst(point.x, point.y, '#96ecff', 9, 75);
     flash = Math.max(flash, 0.09);
   }
@@ -585,14 +590,11 @@
       if (event.code === 'KeyS' && !event.repeat) reset();
       return;
     }
-    if (state === 'countdown' && !event.repeat) {
-      startRun();
-      if (event.code === 'Escape' || event.code === 'KeyR') { event.preventDefault(); return; }
-    }
+    if (state === 'countdown' && !event.repeat && event.code !== 'Escape' && event.code !== 'KeyR') startRun();
     if (event.code === 'Space') { if (!event.repeat) press(event); else event.preventDefault(); }
     if (event.code === 'KeyR') { event.preventDefault(); if (!event.repeat) reset(); }
     if (event.code === 'Escape') { event.preventDefault(); if (!event.repeat) togglePause(); }
-    if (event.code === 'ControlLeft' || event.code === 'ControlRight') { event.preventDefault(); if (!event.repeat) jump(); }
+    if (event.code === 'KeyV') { event.preventDefault(); if (!event.repeat) jump(); }
     if (event.code === 'ArrowUp' || event.code === 'KeyW') { event.preventDefault(); if (state === 'running') shortenInputs.add(event.code); }
     if (event.code === 'ArrowDown' || event.code === 'KeyS') { event.preventDefault(); if (state === 'running') lengthenInputs.add(event.code); }
   });
@@ -610,7 +612,7 @@
   restartButton.addEventListener('click', event => {
     if (state === 'dead' && event.detail > 0) reset();
   });
-  jumpButton.addEventListener('click', jump);
+  jumpButton.addEventListener('click', () => { startRun(); jump(); });
   pauseButton.addEventListener('click', togglePause);
   resumeButton.addEventListener('click', togglePause);
   for (const [button, inputs] of [[shortenButton, shortenInputs], [lengthenButton, lengthenInputs]]) {
