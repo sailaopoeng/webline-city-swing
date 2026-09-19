@@ -109,6 +109,9 @@ canvas {
 .hint.faded {
   opacity:.38
 }
+.mobile-hint,.mobile-note {
+  display:none
+}
 .key {
   display:inline-block;
   padding:3px 6px;
@@ -127,6 +130,9 @@ canvas {
   z-index:3
 }
 .game-controls.hidden-controls {
+  display:none
+}
+#web-button {
   display:none
 }
 .game-controls button,.primary-button {
@@ -272,7 +278,7 @@ h1 {
   outline:2px solid #ffe5e5;
   outline-offset:2px
 }
-@media(max-width:560px) {
+@media(max-width:560px), (hover:none) and (pointer:coarse) {
   .hud {
     padding:17px 17px
   }
@@ -293,18 +299,74 @@ h1 {
     font-size:8px
   }
   .hint {
+    bottom:calc(max(12px,env(safe-area-inset-bottom)) + 122px);
+    max-width:calc(100% - 24px);
+    padding:7px 12px;
+    font-size:10px;
+    letter-spacing:.04em;
+    text-align:center
+  }
+  .desktop-hint,.desktop-note {
     display:none
+  }
+  .mobile-hint,.mobile-note {
+    display:inline
   }
   .game-controls {
     bottom:max(12px,env(safe-area-inset-bottom));
     width:calc(100% - 20px);
-    gap:5px
+    display:grid;
+    grid-template-columns:repeat(5,minmax(0,1fr));
+    grid-template-areas:"shorter shorter longer longer pause" "web web web jump jump";
+    gap:6px
   }
   .game-controls button {
-    flex:1;
     min-width:0;
-    padding:11px 3px;
-    font-size:9px;
-    letter-spacing:0
+    min-height:48px;
+    padding:8px 3px;
+    font-size:11px;
+    letter-spacing:.02em
+  }
+  .game-controls button span {
+    display:none
+  }
+  #web-button {
+    display:block;
+    grid-area:web;
+    min-height:58px;
+    background:#206077e8;
+    border-color:#8be9f4a8;
+    font-size:15px
+  }
+  #web-button.active {
+    background:#37a2b6;
+    color:#071725
+  }
+  #jump-button {
+    grid-area:jump;
+    min-height:58px;
+    background:#7f3545e8;
+    border-color:#ff9aa4a8;
+    font-size:15px
+  }
+  #shorten-button { grid-area:shorter }
+  #lengthen-button { grid-area:longer }
+  #pause-button { grid-area:pause }
+}
+@media(max-width:560px) and (max-height:480px), (hover:none) and (pointer:coarse) and (max-height:480px) {
+  .hint {
+    display:none
+  }
+  .game-controls {
+    width:calc(100% - 12px);
+    bottom:max(6px,env(safe-area-inset-bottom));
+    grid-template-columns:repeat(5,minmax(0,1fr));
+    gap:4px
+  }
+  .game-controls button {
+    min-height:38px
+  }
+  #web-button,#jump-button {
+    min-height:45px
   }
 }

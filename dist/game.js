@@ -35,6 +35,7 @@
   const pauseNode = document.getElementById('pause');
   const pauseButton = document.getElementById('pause-button');
   const resumeButton = document.getElementById('resume-button');
+  const webButton = document.getElementById('web-button');
   const jumpButton = document.getElementById('jump-button');
   const shortenButton = document.getElementById('shorten-button');
   const lengthenButton = document.getElementById('lengthen-button');
@@ -48,6 +49,7 @@
   let state = 'countdown', resumeState = 'running', countdownRemaining = 0;
   let retryAt = 0, elapsed = 0, score = 0, best = 0;
   const pressedInputs = new Set();
+  const webButtonInputs = new Set();
   const shortenInputs = new Set();
   const lengthenInputs = new Set();
   let accumulator = 0, lastFrame = 0, flash = 0;
@@ -72,6 +74,8 @@
     state = 'countdown';
     countdownRemaining = TUNE.countdownSeconds;
     pressedInputs.clear();
+    webButtonInputs.clear();
+    webButton.classList.remove('active');
     shortenInputs.clear();
     lengthenInputs.clear();
     shortenButton.classList.remove('active');
@@ -201,6 +205,8 @@
     resumeState = state;
     state = 'paused';
     pressedInputs.clear();
+    webButtonInputs.clear();
+    webButton.classList.remove('active');
     shortenInputs.clear();
     lengthenInputs.clear();
     shortenButton.classList.remove('active');
@@ -260,6 +266,8 @@
     player.tumbleTimer = 0.4;
     player.tumbleAngle = 0;
     pressedInputs.clear();
+    webButtonInputs.clear();
+    webButton.classList.remove('active');
     release();
     burst(player.x, player.y, '#ff626b', 24, 210);
     flash = 0.28;
@@ -606,9 +614,25 @@
   window.addEventListener('pointerdown', press);
   window.addEventListener('pointerup', unpress);
   window.addEventListener('pointercancel', unpress);
-  for (const button of [jumpButton, shortenButton, lengthenButton, pauseButton, resumeButton, restartButton]) {
+  for (const button of [webButton, jumpButton, shortenButton, lengthenButton, pauseButton, resumeButton, restartButton]) {
     button.addEventListener('pointerdown', event => event.stopPropagation());
   }
+  webButton.addEventListener('pointerdown', event => {
+    event.preventDefault();
+    webButton.setPointerCapture(event.pointerId);
+    webButtonInputs.add(event.pointerId);
+    webButton.classList.add('active');
+    press(event);
+  });
+  const releaseWebButton = event => {
+    event.stopPropagation();
+    webButtonInputs.delete(event.pointerId);
+    if (!webButtonInputs.size) webButton.classList.remove('active');
+    unpress(event);
+  };
+  webButton.addEventListener('pointerup', releaseWebButton);
+  webButton.addEventListener('pointercancel', releaseWebButton);
+  webButton.addEventListener('lostpointercapture', releaseWebButton);
   restartButton.addEventListener('click', event => {
     if (state === 'dead' && event.detail > 0) reset();
   });
@@ -633,6 +657,8 @@
   }
   window.addEventListener('blur', () => {
     pressedInputs.clear();
+    webButtonInputs.clear();
+    webButton.classList.remove('active');
     shortenInputs.clear();
     lengthenInputs.clear();
     shortenButton.classList.remove('active');
