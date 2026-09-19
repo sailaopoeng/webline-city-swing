@@ -109,6 +109,31 @@ canvas {
 .hint.faded {
   opacity:.38
 }
+.glide-hud {
+  position:absolute;
+  top:clamp(20px,4vh,34px);
+  left:50%;
+  transform:translateX(-50%);
+  padding:6px 14px;
+  border:1px solid #8beaf688;
+  border-radius:100px;
+  background:#164d5bdd;
+  color:#b8f8ff;
+  font-size:11px;
+  font-weight:900;
+  letter-spacing:.18em;
+  pointer-events:none;
+  transition:opacity .3s, background .3s, border-color .3s;
+  z-index:1
+}
+.glide-hud[hidden] {
+  display:none
+}
+.glide-hud.gliding {
+  background:#ff5b64dd;
+  border-color:#ffb3b7;
+  color:#fff
+}
 .mobile-hint,.mobile-note {
   display:none
 }
@@ -212,21 +237,23 @@ canvas {
   inset:0;
   display:grid;
   place-items:center;
-  background:#050915a8;
-  backdrop-filter:blur(5px);
+  background:#05091568;
+  backdrop-filter:blur(1.5px);
   z-index:2
 }
 .death-screen[hidden] {
   display:none
 }
 .death-card {
+  position:relative;
+  z-index:1;
   text-align:center;
   padding:34px 28px;
   max-width:360px;
   width:calc(100% - 36px);
   border:1px solid #879bc333;
   border-radius:18px;
-  background:linear-gradient(150deg,#172239f0,#0d1527f0);
+  background:linear-gradient(150deg,#172239e8,#0d1527e8);
   box-shadow:0 24px 80px #0008
 }
 .eyebrow {
@@ -278,6 +305,13 @@ h1 {
   outline:2px solid #ffe5e5;
   outline-offset:2px
 }
+@media(max-width:760px) {
+  .hint {
+    white-space:normal;
+    text-align:center;
+    line-height:1.6
+  }
+}
 @media(max-width:560px), (hover:none) and (pointer:coarse) {
   .hud {
     padding:17px 17px
@@ -305,6 +339,12 @@ h1 {
     font-size:10px;
     letter-spacing:.04em;
     text-align:center
+  }
+  .glide-hud {
+    top:clamp(14px,3vh,22px);
+    padding:5px 10px;
+    font-size:9px;
+    letter-spacing:.12em
   }
   .desktop-hint,.desktop-note {
     display:none

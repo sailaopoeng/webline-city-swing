@@ -16,7 +16,8 @@
       <div class="brand"><span class="brand-mark">◆</span> WEBLINE <span class="brand-sub">CITY SWING</span></div>
       <div class="scores"><div><span class="label">DISTANCE</span><strong id="score">0000</strong></div><div><span class="label">BEST</span><strong id="best">0000</strong></div></div>
     </header>
-    <div class="hint" id="hint"><span class="desktop-hint"><span class="key">SPACE</span> HOLD TO WEB <span class="dot">·</span> <span class="key">V</span> JUMP <span class="dot">·</span> <span class="key">↑</span><span class="key">↓</span> WEB LENGTH <span class="dot">·</span> <span class="key">ESC</span> PAUSE</span><span class="mobile-hint">Hold WEB to swing · Release to fly</span></div>
+    <div class="hint" id="hint"><span class="desktop-hint"><span class="key">SPACE</span> HOLD TO WEB <span class="dot">·</span> <span class="key">V</span> JUMP <span class="dot">·</span> <span class="key">↑</span><span class="key">↓</span> WEB LENGTH <span class="dot">·</span> <span class="key">←</span><span class="key">→</span> SWING <span class="dot">·</span> <span class="key">ESC</span> PAUSE</span><span class="mobile-hint">Hold WEB to swing · Release to fly</span></div>
+    <div class="glide-hud" id="glide-hud" hidden>GLIDE READY</div>
     <div class="game-controls" aria-label="Game controls">
       <button type="button" id="web-button" aria-label="Hold to swing with a web">WEB <span>HOLD</span></button>
       <button type="button" id="jump-button">JUMP <span>V</span></button>
@@ -31,7 +32,7 @@
       <div class="state-card"><span class="eyebrow">BREAK TIME</span><h1>Paused</h1><button type="button" id="resume-button" class="primary-button">Resume</button><span class="state-note desktop-note">Press Esc to resume</span></div>
     </div>
     <div class="death-screen" id="death" hidden>
-      <div class="death-card"><span class="eyebrow">RUN ENDED</span><div class="final-distance"><span>DISTANCE</span><strong id="final-score">0000</strong></div><h1>One more swing?</h1><button type="button" class="restart-note" id="restart-button">Swing more <span class="desktop-note">· Click or press S</span></button></div>
+      <div class="death-card"><span class="eyebrow">SWING ENDED</span><div class="final-distance"><span>DISTANCE</span><strong id="final-score">0000</strong></div><h1>One more swing?</h1>      <button type="button" class="restart-note" id="restart-button">Swing more <span class="desktop-note">· Click or press ENTER</span></button></div>
     </div>
   </main>
 </body>
