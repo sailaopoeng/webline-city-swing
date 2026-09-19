@@ -43,6 +43,8 @@
   const bestNode = document.getElementById('best');
   const finalNode = document.getElementById('final-score');
   const deathNode = document.getElementById('death');
+  const deathDancerCanvas = document.getElementById('death-dancer');
+  const deathDancerCtx = deathDancerCanvas ? deathDancerCanvas.getContext('2d') : null;
   const restartButton = document.getElementById('restart-button');
   const countdownNode = document.getElementById('countdown');
   const countdownNumberNode = document.getElementById('countdown-number');
@@ -148,6 +150,10 @@
     scoreNode.textContent = '0000';
     if (glideHud) glideHud.hidden = true;
     deathNode.hidden = true;
+    if (deathDancerCtx) {
+      deathDancerCtx.setTransform(1, 0, 0, 1, 0, 0);
+      deathDancerCtx.clearRect(0, 0, deathDancerCanvas.width, deathDancerCanvas.height);
+    }
     controlsNode.classList.remove('hidden-controls');
     pauseNode.hidden = true;
     pauseButton.firstChild.textContent = 'PAUSE ';
@@ -625,6 +631,57 @@
     ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(endX, endY, width * 0.37, 0, TAU); ctx.fill();
   }
 
+  function drawDeathLimb(targetCtx, sx, sy, jointX, jointY, endX, endY, width, accent) {
+    targetCtx.beginPath(); targetCtx.moveTo(sx, sy); targetCtx.lineTo(jointX, jointY); targetCtx.lineTo(endX, endY);
+    targetCtx.strokeStyle = '#080e19'; targetCtx.lineWidth = width + 2; targetCtx.stroke();
+    targetCtx.strokeStyle = '#252b36'; targetCtx.lineWidth = width; targetCtx.stroke();
+    targetCtx.beginPath(); targetCtx.moveTo(jointX, jointY); targetCtx.lineTo(endX, endY);
+    targetCtx.strokeStyle = accent; targetCtx.lineWidth = width - 2; targetCtx.stroke();
+    targetCtx.fillStyle = accent; targetCtx.beginPath(); targetCtx.arc(endX, endY, width * 0.37, 0, TAU); targetCtx.fill();
+  }
+
+  function drawDeathDancer() {
+    if (!deathDancerCtx || !deathDancerCanvas) return;
+    const c = deathDancerCtx;
+    const t = player.danceTimer || 0;
+    const beat = Math.sin(t * 8);
+    const beat2 = Math.sin(t * 8 + Math.PI / 2);
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, deathDancerCanvas.width, deathDancerCanvas.height);
+    c.save();
+    c.translate(deathDancerCanvas.width * 0.5, 87 + beat * 2);
+    c.scale(2.08, 2.08);
+    c.rotate(beat * 0.1);
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+
+    c.fillStyle = '#55d6ef22';
+    c.beginPath(); c.ellipse(0, 28, 24, 7, 0, 0, TAU); c.fill();
+    drawDeathLimb(c, -4, 8, -10 + beat2 * 8, 14, -12 + beat2 * 14, 24, 7, '#b93349');
+    drawDeathLimb(c, 4, 8, 10 - beat2 * 8, 14, 12 - beat2 * 14, 24, 7, '#d54353');
+    drawDeathLimb(c, -7, -7, -18, -12 + beat * 14, -26, -22 + beat * 16, 6, '#b93349');
+    drawDeathLimb(c, 7, -7, 18, -12 - beat * 14, 26, -22 - beat * 16, 6, '#b93349');
+
+    c.fillStyle = '#080e19';
+    c.beginPath(); c.moveTo(-9, -10); c.lineTo(9, -10); c.lineTo(9, 7); c.lineTo(5, 11); c.lineTo(-5, 11); c.lineTo(-9, 7); c.closePath(); c.fill();
+    c.fillStyle = '#282d37';
+    c.beginPath(); c.moveTo(-8, -9); c.lineTo(8, -9); c.lineTo(6, 9); c.lineTo(-6, 9); c.closePath(); c.fill();
+    c.fillStyle = '#c9384b';
+    c.beginPath(); c.moveTo(-7, -9); c.lineTo(7, -9); c.lineTo(5, 1); c.lineTo(0, 5); c.lineTo(-5, 1); c.closePath(); c.fill();
+    c.fillStyle = '#f05b66';
+    c.beginPath(); c.moveTo(-4, -7); c.lineTo(4, -7); c.lineTo(0, -4); c.closePath(); c.fill();
+    c.fillStyle = '#141a25'; c.fillRect(-6, 6, 12, 3);
+
+    c.fillStyle = '#080e19'; c.beginPath(); c.ellipse(0, -19, 10.5, 11.5, 0, 0, TAU); c.fill();
+    c.fillStyle = '#be3448'; c.beginPath(); c.ellipse(0, -19, 9, 10, 0, 0, TAU); c.fill();
+    c.fillStyle = '#252b36'; c.beginPath(); c.moveTo(-4, -27); c.lineTo(4, -27); c.lineTo(6, -13); c.lineTo(-6, -13); c.closePath(); c.fill();
+    c.fillStyle = '#f3fbff';
+    c.beginPath(); c.moveTo(-8, -21); c.lineTo(-2, -20); c.lineTo(-3, -16); c.lineTo(-7, -17); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(8, -21); c.lineTo(2, -20); c.lineTo(3, -16); c.lineTo(7, -17); c.closePath(); c.fill();
+    c.fillStyle = '#98e5f0'; c.fillRect(-6, -18, 2, 1); c.fillRect(4, -18, 2, 1);
+    c.restore();
+  }
+
   function drawPlayer(dt) {
     const x = player.x - camera.x, y = player.y - 10;
     const stride = Math.sin(elapsed * 16);
@@ -839,7 +896,7 @@
     drawBuildings();
     drawAnchorCue();
     drawAttachEffects(dt);
-    if (state !== 'dead' || player.tumbleTimer > 0 || player.dancing) drawPlayer(dt);
+    if (state !== 'dead' || player.tumbleTimer > 0) drawPlayer(dt);
     if (state === 'dead') {
       player.tumbleTimer = Math.max(0, player.tumbleTimer - dt);
       if (player.tumbleTimer === 0) {
@@ -848,6 +905,7 @@
         player.x = camera.x + W * 0.5;
         player.y = H * 0.92;
         player.danceTimer = (player.danceTimer || 0) + dt;
+        drawDeathDancer();
       }
     }
     if (state !== 'paused') drawParticles(dt);

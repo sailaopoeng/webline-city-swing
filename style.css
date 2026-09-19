@@ -238,7 +238,7 @@ canvas {
   display:grid;
   place-items:center;
   background:#05091568;
-  backdrop-filter:blur(1.5px);
+  backdrop-filter:none;
   z-index:2
 }
 .death-screen[hidden] {
@@ -253,8 +253,16 @@ canvas {
   width:calc(100% - 36px);
   border:1px solid #879bc333;
   border-radius:18px;
-  background:linear-gradient(150deg,#172239e8,#0d1527e8);
+  background:linear-gradient(150deg,#172239f5,#0d1527f5);
   box-shadow:0 24px 80px #0008
+}
+.death-dancer {
+  display:block;
+  width:220px;
+  height:150px;
+  margin:-18px auto 0;
+  filter:drop-shadow(0 0 14px #64e5ff88);
+  pointer-events:none
 }
 .eyebrow {
   font-size:10px;
@@ -370,6 +378,11 @@ h1 {
   .game-controls button span {
     display:none
   }
+  .death-dancer {
+    width:190px;
+    height:128px;
+    margin:-12px auto 0
+  }
   #web-button {
     display:block;
     grid-area:web;
@@ -408,5 +421,25 @@ h1 {
   }
   #web-button,#jump-button {
     min-height:45px
+  }
+}
+@media(max-height:520px) {
+  .death-card {
+    padding:20px 22px
+  }
+  .death-dancer {
+    width:150px;
+    height:102px;
+    margin:-8px auto -2px
+  }
+  .final-distance {
+    margin:8px 0 3px
+  }
+  .final-distance strong {
+    font-size:clamp(44px,11vw,64px)
+  }
+  h1 {
+    margin:6px 0 10px;
+    font-size:26px
   }
 }
