@@ -4,6 +4,8 @@
 
 Open `index.html` in a modern browser, or run `python3 -m http.server` here. There is no build step, dependency, backend, or game engine. `index.html` owns the canvas and HUD; `style.css` owns the responsive overlay; `game.js` is one small IIFE with functions for input, world generation, physics, collision, camera, and drawing. Keep the project plain HTML/CSS/JavaScript and Canvas unless the scope changes.
 
+For Sites hosting, root `index.html`, `style.css`, and `game.js` remain the editable source; `dist/` is their byte-for-byte static deployment copy. Sync those three files into `dist/` before each Sites commit/publish. `.openai/hosting.json` points Sites at `dist/`; do not put secrets in it.
+
 ## Physics and game loop
 
 World coordinates use CSS pixels, with positive Y downward. `requestAnimationFrame` draws; `frame()` advances physics in fixed `1/120` second steps and caps catch-up after a stalled frame. Gravity and automatic rightward acceleration update velocity before position. A web attaches to a selected visible mast node above the player, usually ahead. Its length is set from the current distance; the rope may slacken, but when stretched `constrainRope()` projects the player back to the rope length and removes only outward radial velocity. Tangential velocity remains, so release preserves swing momentum. Speed is capped. `collide()` allows downward roof landings, kills on walls, red vents, or falling below the view. Camera X eases to keep the player about 28% from the left edge. Score is maximum forward distance, and best score uses optional `localStorage`.

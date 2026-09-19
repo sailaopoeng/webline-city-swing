@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#090e1d">
+  <link rel="icon" href="data:,">
+  <title>Webline — City Swing</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="game.js" defer></script>
+</head>
+<body>
+  <main class="game-shell" aria-label="Webline city swinging game">
+    <canvas id="game" aria-label="Side scrolling city game. Hold Space, mouse, or touch to swing. Press V to jump, Up or W to shorten the web, Down or S to lengthen it, and Escape to pause."></canvas>
+    <header class="hud">
+      <div class="brand"><span class="brand-mark">◆</span> WEBLINE <span class="brand-sub">CITY SWING</span></div>
+      <div class="scores"><div><span class="label">DISTANCE</span><strong id="score">0000</strong></div><div><span class="label">BEST</span><strong id="best">0000</strong></div></div>
+    </header>
+    <div class="hint" id="hint"><span class="key">SPACE</span> HOLD TO WEB <span class="dot">·</span> <span class="key">V</span> JUMP <span class="dot">·</span> <span class="key">↑</span><span class="key">↓</span> WEB LENGTH <span class="dot">·</span> <span class="key">ESC</span> PAUSE</div>
+    <div class="game-controls" aria-label="Game controls">
+      <button type="button" id="jump-button">JUMP <span>V</span></button>
+      <button type="button" id="shorten-button">SHORTER <span>↑ / W</span></button>
+      <button type="button" id="lengthen-button">LONGER <span>↓ / S</span></button>
+      <button type="button" id="pause-button">PAUSE <span>ESC</span></button>
+    </div>
+    <div class="state-screen" id="countdown" role="status" aria-live="polite" hidden>
+      <div class="state-card"><span class="eyebrow">GET READY</span><strong class="countdown-number" id="countdown-number">3</strong><span class="state-note">Press any key or tap to start now</span><span class="state-note">Hold Space or touch the city to web</span></div>
+    </div>
+    <div class="state-screen" id="pause" hidden>
+      <div class="state-card"><span class="eyebrow">BREAK TIME</span><h1>Paused</h1><button type="button" id="resume-button" class="primary-button">Resume</button><span class="state-note">Press Esc to resume</span></div>
+    </div>
+    <div class="death-screen" id="death" hidden>
+      <div class="death-card"><span class="eyebrow">RUN ENDED</span><div class="final-distance"><span>DISTANCE</span><strong id="final-score">0000</strong></div><h1>One more swing?</h1><button type="button" class="restart-note" id="restart-button">Swing more · Click or press S</button></div>
+    </div>
+  </main>
+</body>
+</html>
