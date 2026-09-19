@@ -10,11 +10,11 @@ World coordinates use CSS pixels, with positive Y downward. `requestAnimationFra
 
 ## Controls and state
 
-Hold Space, mouse, or touch to attach/maintain the web; release to detach. Holding while no node is in range retries attachment every 0.09 seconds. The selected eligible node is marked by a ring. Space/click/tap restarts immediately after death; R resets at any time. A set tracks simultaneous input sources so releasing one does not detach another. Blur releases all inputs. Resizing resets the run because roof and mast heights depend on viewport height.
+Each new run starts with a three-second countdown; any key or a tap skips it. Hold Space, mouse, or touch to attach/maintain the web; release to detach. Holding while no node is in range retries attachment every 0.09 seconds. The selected eligible node is marked by a ring. Press Ctrl or use the Jump button to jump while grounded. Hold Up/W or the Shorter button to reel in an attached web; hold Down/S or the Longer button to let it out within the configured rope limits. Esc or the Pause button pauses and resumes, clearing held inputs on pause. After death, only S or a mouse/touch click on the Swing more button resets to the countdown; a later key press or tap skips it. R resets during active play, countdown, or pause. A set tracks simultaneous web input sources so releasing one does not detach another. Blur releases all inputs. Resizing resets the run because roof and mast heights depend on viewport height.
 
 ## Tuning
 
-Change `TUNE` at the top of `game.js`: `gravity`, `horizontalStartingSpeed`, `airAcceleration`, `swingAcceleration`, `groundAcceleration`, `maxSpeed`, `maxFallSpeed`, `minRopeLength`, `maxRopeLength`, `attachmentRange`, `ropeConstraintStrength`, `playerRadius`, `buildingSpacing`, `cameraSmoothing`, and `simulationStep`. Keep `ropeConstraintStrength` at `1` for the current taut-rope behavior. Building widths, heights, mast placement, and vent chance are in `makeBuilding()`/`generateAhead()`; attachment scoring is in `findAnchor()`.
+Change `TUNE` at the top of `game.js`: `gravity`, `horizontalStartingSpeed`, `airAcceleration`, `swingAcceleration`, `groundAcceleration`, `maxSpeed`, `maxFallSpeed`, `minRopeLength`, `maxRopeLength`, `attachmentRange`, `ropeConstraintStrength`, `jumpSpeed`, `ropeAdjustSpeed`, `countdownSeconds`, `playerRadius`, `buildingSpacing`, `cameraSmoothing`, and `simulationStep`. Keep `ropeConstraintStrength` at `1` for the current taut-rope behavior. Building widths, heights, mast placement, and vent chance are in `makeBuilding()`/`generateAhead()`; attachment scoring is in `findAnchor()`.
 
 ## Current limits and checks
 

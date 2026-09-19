@@ -14,6 +14,9 @@
     maxRopeLength: 370,
     attachmentRange: 390,
     ropeConstraintStrength: 1, // 1 = a taut, inextensible rope
+    jumpSpeed: 620,
+    ropeAdjustSpeed: 170,
+    countdownSeconds: 3,
     playerRadius: 13,
     buildingSpacing: [88, 135],
     cameraSmoothing: 5.5,
@@ -26,14 +29,27 @@
   const bestNode = document.getElementById('best');
   const finalNode = document.getElementById('final-score');
   const deathNode = document.getElementById('death');
+  const restartButton = document.getElementById('restart-button');
+  const countdownNode = document.getElementById('countdown');
+  const countdownNumberNode = document.getElementById('countdown-number');
+  const pauseNode = document.getElementById('pause');
+  const pauseButton = document.getElementById('pause-button');
+  const resumeButton = document.getElementById('resume-button');
+  const jumpButton = document.getElementById('jump-button');
+  const shortenButton = document.getElementById('shorten-button');
+  const lengthenButton = document.getElementById('lengthen-button');
+  const controlsNode = document.querySelector('.game-controls');
   const hintNode = document.getElementById('hint');
   const TAU = Math.PI * 2;
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const rand = (min, max) => min + Math.random() * (max - min);
 
   let W = 0, H = 0, dpr = 1, player, rope, buildings, particles, camera, nextBuildingX;
-  let state = 'running', retryAt = 0, elapsed = 0, score = 0, best = 0;
+  let state = 'countdown', resumeState = 'running', countdownRemaining = 0;
+  let retryAt = 0, elapsed = 0, score = 0, best = 0;
   const pressedInputs = new Set();
+  const shortenInputs = new Set();
+  const lengthenInputs = new Set();
   let accumulator = 0, lastFrame = 0, flash = 0;
 
   try { best = Number(localStorage.getItem('webline-best')) || 0; } catch (_) { /* Private browsing can disable storage. */ }
@@ -53,8 +69,13 @@
   }
 
   function reset() {
-    state = 'running';
+    state = 'countdown';
+    countdownRemaining = TUNE.countdownSeconds;
     pressedInputs.clear();
+    shortenInputs.clear();
+    lengthenInputs.clear();
+    shortenButton.classList.remove('active');
+    lengthenButton.classList.remove('active');
     rope = null;
     buildings = [];
     particles = [];
@@ -64,12 +85,17 @@
     flash = 0;
     retryAt = 0;
     accumulator = 0;
-    player = { x: 116, y: H * 0.43, px: 116, py: H * 0.43, vx: TUNE.horizontalStartingSpeed, vy: 0, grounded: false };
+    player = { x: 116, y: H * 0.43, px: 116, py: H * 0.43, vx: TUNE.horizontalStartingSpeed, vy: 0, grounded: false, landingTimer: 0, tumbleTimer: 0, tumbleAngle: 0, pose: null };
     buildings.push(makeBuilding(-260, 600, H * 0.77, 0));
     nextBuildingX = 340 + rand(...TUNE.buildingSpacing);
     generateAhead();
     scoreNode.textContent = '0000';
     deathNode.hidden = true;
+    controlsNode.classList.remove('hidden-controls');
+    pauseNode.hidden = true;
+    pauseButton.firstChild.textContent = 'PAUSE ';
+    countdownNode.hidden = false;
+    countdownNumberNode.textContent = String(Math.ceil(countdownRemaining));
     lastFrame = performance.now();
   }
 
@@ -141,9 +167,49 @@
     rope = null; // Velocity is deliberately unchanged.
   }
 
+  function jump() {
+    if (state !== 'running' || !player.grounded) return;
+    release();
+    player.vy = -TUNE.jumpSpeed;
+    player.grounded = false;
+    burst(player.x, player.y + TUNE.playerRadius, '#b9efff', 7, 85);
+  }
+
+  function startRun() {
+    if (state !== 'countdown') return;
+    countdownRemaining = 0;
+    state = 'running';
+    countdownNode.hidden = true;
+  }
+
+  function togglePause() {
+    if (state === 'dead') return;
+    if (state === 'paused') {
+      state = resumeState;
+      pauseNode.hidden = true;
+      countdownNode.hidden = state !== 'countdown';
+      pauseButton.firstChild.textContent = 'PAUSE ';
+      lastFrame = performance.now();
+      accumulator = 0;
+      return;
+    }
+    resumeState = state;
+    state = 'paused';
+    pressedInputs.clear();
+    shortenInputs.clear();
+    lengthenInputs.clear();
+    shortenButton.classList.remove('active');
+    lengthenButton.classList.remove('active');
+    release();
+    countdownNode.hidden = true;
+    pauseNode.hidden = false;
+    pauseButton.firstChild.textContent = 'RESUME ';
+  }
+
   function press(event) {
     if (event && event.cancelable) event.preventDefault();
-    if (state === 'dead') reset();
+    if (state === 'paused' || state === 'dead') return;
+    startRun();
     const key = event && event.code === 'Space' ? 'space' : `pointer-${event?.pointerId ?? 0}`;
     if (pressedInputs.has(key)) return;
     pressedInputs.add(key);
@@ -186,12 +252,15 @@
   function die() {
     if (state !== 'running') return;
     state = 'dead';
+    player.tumbleTimer = 0.4;
+    player.tumbleAngle = 0;
     pressedInputs.clear();
     release();
     burst(player.x, player.y, '#ff626b', 24, 210);
     flash = 0.28;
     finalNode.textContent = formatScore(score);
-    deathNode.hidden = false;
+    deathNode.hidden = true;
+    controlsNode.classList.add('hidden-controls');
     if (score > best) {
       best = score;
       bestNode.textContent = formatScore(best);
@@ -201,6 +270,7 @@
 
   function collide() {
     const r = TUNE.playerRadius;
+    const wasGrounded = player.grounded;
     player.grounded = false;
     for (const building of buildings) {
       if (building.x > player.x + r + 40 || building.x + building.w < player.x - r - 40) continue;
@@ -210,6 +280,7 @@
       if (!hitCircleRect(player.x, player.y, r, building.x, building.top, building.w, H - building.top + 200)) continue;
       const overRoof = player.px + r > building.x && player.px - r < building.x + building.w;
       if (player.py + r <= building.top + 3 && player.vy >= -10 && overRoof) {
+        if (!wasGrounded && player.vy > 90) player.landingTimer = 0.22;
         player.y = building.top - r;
         player.vy = 0;
         player.grounded = true;
@@ -219,8 +290,20 @@
   }
 
   function update(dt) {
-    elapsed += dt;
+    if (state === 'countdown') {
+      countdownRemaining = Math.max(0, countdownRemaining - dt);
+      const nextNumber = String(Math.ceil(countdownRemaining));
+      if (countdownNumberNode.textContent !== nextNumber) countdownNumberNode.textContent = nextNumber;
+      if (countdownRemaining === 0) startRun();
+      return;
+    }
     if (state !== 'running') return;
+    elapsed += dt;
+    player.landingTimer = Math.max(0, player.landingTimer - dt);
+    if (rope) {
+      const direction = Number(lengthenInputs.size > 0) - Number(shortenInputs.size > 0);
+      rope.length = clamp(rope.length + direction * TUNE.ropeAdjustSpeed * dt, TUNE.minRopeLength, TUNE.maxRopeLength);
+    }
     if (pressedInputs.size && !rope && elapsed >= retryAt) {
       attach();
       retryAt = elapsed + 0.09;
@@ -319,26 +402,135 @@
     ctx.stroke();
   }
 
-  function drawPlayer() {
-    const x = player.x - camera.x, y = player.y;
-    if (rope) {
-      const ax = rope.x - camera.x, ay = rope.y;
-      ctx.strokeStyle = '#91eaff34'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(x, y - 4); ctx.lineTo(ax, ay); ctx.stroke();
-      ctx.strokeStyle = '#e6fcff'; ctx.lineWidth = 1.7; ctx.beginPath(); ctx.moveTo(x, y - 4); ctx.lineTo(ax, ay); ctx.stroke();
+  function drawSuitLimb(sx, sy, jointX, jointY, endX, endY, width, accent) {
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(jointX, jointY); ctx.lineTo(endX, endY);
+    ctx.strokeStyle = '#080e19'; ctx.lineWidth = width + 2; ctx.stroke();
+    ctx.strokeStyle = '#252b36'; ctx.lineWidth = width; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(jointX, jointY); ctx.lineTo(endX, endY);
+    ctx.strokeStyle = accent; ctx.lineWidth = width - 2; ctx.stroke();
+    ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(endX, endY, width * 0.37, 0, TAU); ctx.fill();
+  }
+
+  function drawPlayer(dt) {
+    const x = player.x - camera.x, y = player.y - 10;
+    const stride = Math.sin(elapsed * 16);
+    const landing = clamp(player.landingTimer / 0.22, 0, 1);
+    const target = {
+      lean: clamp(player.vx / TUNE.maxSpeed * 0.24 + player.vy / TUNE.maxFallSpeed * 0.2, -0.4, 0.48),
+      crouch: 0,
+      lKx: -7, lKy: 16, lFx: -10, lFy: 25,
+      rKx: 7, rKy: 16, rFx: 10, rFy: 25,
+      lEx: -15, lEy: -2, lHx: -21, lHy: 3,
+      rEx: 15, rEy: -2, rHx: 21, rHy: 3,
+    };
+
+    if (state === 'dead') {
+      player.tumbleAngle += dt * 9;
+      target.lean = player.tumbleAngle;
+      target.lKx = -16; target.lKy = 12; target.lFx = -25; target.lFy = 7;
+      target.rKx = 14; target.rKy = 14; target.rFx = 22; target.rFy = 23;
+      target.lEx = -17; target.lEy = -14; target.lHx = -25; target.lHy = -20;
+      target.rEx = 15; target.rEy = 5; target.rHx = 23; target.rHy = 12;
+    } else if (rope) {
+      const trail = -Math.sign(player.vx || 1);
+      target.lean = clamp(player.vx / TUNE.maxSpeed * 0.31 + player.vy / TUNE.maxFallSpeed * 0.21, -0.45, 0.55);
+      target.lKx = -5 + trail * 7; target.lKy = 15;
+      target.lFx = -6 + trail * 15; target.lFy = 25;
+      target.rKx = 5 + trail * 9; target.rKy = 13;
+      target.rFx = 6 + trail * 18; target.rFy = 22;
+      const side = rope.x >= player.x ? 1 : -1;
+      const angle = target.lean;
+      const dx = rope.x - player.x, dy = rope.y - player.y;
+      const localX = dx * Math.cos(angle) + dy * Math.sin(angle);
+      const localY = -dx * Math.sin(angle) + dy * Math.cos(angle);
+      const length = Math.hypot(localX, localY) || 1;
+      const arm = side > 0 ? 'r' : 'l';
+      const other = side > 0 ? 'l' : 'r';
+      target[arm + 'Ex'] = side * 8 + localX / length * 12;
+      target[arm + 'Ey'] = -7 + localY / length * 11;
+      target[arm + 'Hx'] = side * 8 + localX / length * 28;
+      target[arm + 'Hy'] = -7 + localY / length * 28;
+      target[other + 'Ex'] = -side * 15;
+      target[other + 'Ey'] = -1;
+      target[other + 'Hx'] = -side * 23;
+      target[other + 'Hy'] = 7;
+    } else if (player.grounded) {
+      target.lean = clamp(player.vx / TUNE.maxSpeed * 0.18, -0.2, 0.28);
+      target.lKx = -4 + stride * 6; target.lKy = 15;
+      target.lFx = -5 + stride * 12; target.lFy = 25;
+      target.rKx = 4 - stride * 6; target.rKy = 15;
+      target.rFx = 5 - stride * 12; target.rFy = 25;
+      target.lEx = -13 - stride * 4; target.lEy = -1;
+      target.lHx = -17 - stride * 8; target.lHy = 6;
+      target.rEx = 13 + stride * 4; target.rEy = -1;
+      target.rHx = 17 + stride * 8; target.rHy = 6;
+      if (landing > 0) {
+        target.crouch = landing * 5;
+        target.lean += landing * 0.16;
+        target.lKx = -13; target.lKy = 13;
+        target.lFx = -17; target.lFy = 21;
+        target.rKx = 13; target.rKy = 13;
+        target.rFx = 17; target.rFy = 21;
+        target.lHx = -20; target.lHy = 2;
+        target.rHx = 20; target.rHy = 2;
+      }
+    } else if (player.vy < -80) {
+      target.lean -= 0.13;
+      target.lKx = -13; target.lKy = 10; target.lFx = -8; target.lFy = 18;
+      target.rKx = 13; target.rKy = 10; target.rFx = 8; target.rFy = 18;
+      target.lEx = -15; target.lEy = -12; target.lHx = -18; target.lHy = -20;
+      target.rEx = 15; target.rEy = -12; target.rHx = 18; target.rHy = -20;
+    } else if (player.vy > 90) {
+      target.lean += 0.1;
+      target.lKx = -12; target.lKy = 18; target.lFx = -20; target.lFy = 25;
+      target.rKx = 12; target.rKy = 18; target.rFx = 20; target.rFy = 25;
+      target.lEx = -19; target.lEy = -7; target.lHx = -28; target.lHy = -3;
+      target.rEx = 19; target.rEy = -7; target.rHx = 28; target.rHy = -3;
     }
-    ctx.save(); ctx.translate(x, y);
-    const lean = clamp(player.vy / 1400, -0.28, 0.32);
-    ctx.rotate(lean);
-    const stride = Math.sin(elapsed * (player.grounded ? 18 : 9)) * (player.grounded ? 4 : 2);
-    ctx.lineCap = 'round';
-    ctx.strokeStyle = '#a8233b'; ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.moveTo(-3, 7); ctx.lineTo(-7 - stride, 20); ctx.moveTo(4, 7); ctx.lineTo(8 + stride, 20); ctx.stroke();
-    ctx.strokeStyle = '#ed485b'; ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.moveTo(-6, -5); ctx.lineTo(-12, 5 - stride); ctx.moveTo(6, -5); ctx.lineTo(12, rope ? -12 : 5 + stride); ctx.stroke();
-    ctx.fillStyle = '#f04e61'; ctx.beginPath(); ctx.roundRect(-8, -10, 16, 20, 5); ctx.fill();
-    ctx.fillStyle = '#ba263f'; ctx.fillRect(-2, 0, 4, 8);
-    ctx.fillStyle = '#f34e60'; ctx.beginPath(); ctx.arc(0, -18, 9.5, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#edf8ff'; ctx.beginPath(); ctx.ellipse(-4, -19, 3.5, 2, -0.2, 0, TAU); ctx.ellipse(4, -19, 3.5, 2, 0.2, 0, TAU); ctx.fill();
+
+    if (!player.pose) player.pose = { ...target };
+    const blend = 1 - Math.exp(-18 * dt);
+    for (const key in target) player.pose[key] += (target[key] - player.pose[key]) * blend;
+    const pose = player.pose;
+    const angle = pose.lean;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const reachingSide = rope && rope.x >= player.x ? 'r' : 'l';
+    if (rope) {
+      const handX = pose[reachingSide + 'Hx'], handY = pose[reachingSide + 'Hy'];
+      const fromX = x + handX * cos - handY * sin;
+      const fromY = y + pose.crouch + handX * sin + handY * cos;
+      const ax = rope.x - camera.x, ay = rope.y;
+      ctx.strokeStyle = '#91eaff34'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(fromX, fromY); ctx.lineTo(ax, ay); ctx.stroke();
+      ctx.strokeStyle = '#e6fcff'; ctx.lineWidth = 1.7;
+      ctx.beginPath(); ctx.moveTo(fromX, fromY); ctx.lineTo(ax, ay); ctx.stroke();
+    }
+
+    ctx.save(); ctx.translate(x, y + pose.crouch); ctx.rotate(angle);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    drawSuitLimb(-4, 8, pose.lKx, pose.lKy, pose.lFx, pose.lFy, 7, '#b93349');
+    drawSuitLimb(4, 8, pose.rKx, pose.rKy, pose.rFx, pose.rFy, 7, '#d54353');
+    if (!rope || reachingSide !== 'l') drawSuitLimb(-7, -7, pose.lEx, pose.lEy, pose.lHx, pose.lHy, 6, '#b93349');
+    if (!rope || reachingSide !== 'r') drawSuitLimb(7, -7, pose.rEx, pose.rEy, pose.rHx, pose.rHy, 6, '#b93349');
+
+    // Dark side panels frame one bright, angular chest panel at small sizes.
+    ctx.fillStyle = '#080e19'; ctx.beginPath(); ctx.moveTo(-9, -10); ctx.lineTo(9, -10); ctx.lineTo(9, 7); ctx.lineTo(5, 11); ctx.lineTo(-5, 11); ctx.lineTo(-9, 7); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#282d37'; ctx.beginPath(); ctx.moveTo(-8, -9); ctx.lineTo(8, -9); ctx.lineTo(6, 9); ctx.lineTo(-6, 9); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#c9384b'; ctx.beginPath(); ctx.moveTo(-7, -9); ctx.lineTo(7, -9); ctx.lineTo(5, 1); ctx.lineTo(0, 5); ctx.lineTo(-5, 1); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#f05b66'; ctx.beginPath(); ctx.moveTo(-4, -7); ctx.lineTo(4, -7); ctx.lineTo(0, -4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#141a25'; ctx.fillRect(-6, 6, 12, 3);
+
+    if (rope && reachingSide === 'l') drawSuitLimb(-7, -7, pose.lEx, pose.lEy, pose.lHx, pose.lHy, 6, '#ec5362');
+    if (rope && reachingSide === 'r') drawSuitLimb(7, -7, pose.rEx, pose.rEy, pose.rHx, pose.rHy, 6, '#ec5362');
+
+    // Full-face mask with large angled eyes; no tiny lines needed to read the face.
+    ctx.fillStyle = '#080e19'; ctx.beginPath(); ctx.ellipse(0, -19, 10.5, 11.5, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#be3448'; ctx.beginPath(); ctx.ellipse(0, -19, 9, 10, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#252b36'; ctx.beginPath(); ctx.moveTo(-4, -27); ctx.lineTo(4, -27); ctx.lineTo(6, -13); ctx.lineTo(-6, -13); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#f3fbff';
+    ctx.beginPath(); ctx.moveTo(-8, -21); ctx.lineTo(-2, -20); ctx.lineTo(-3, -16); ctx.lineTo(-7, -17); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(8, -21); ctx.lineTo(2, -20); ctx.lineTo(3, -16); ctx.lineTo(7, -17); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#98e5f0'; ctx.fillRect(-6, -18, 2, 1); ctx.fillRect(4, -18, 2, 1);
     ctx.restore();
   }
 
@@ -359,9 +551,13 @@
     drawSky();
     drawBuildings();
     drawAnchorCue();
-    if (state === 'running') drawPlayer();
-    drawParticles(dt);
-    if (flash > 0) {
+    if (state !== 'dead' || player.tumbleTimer > 0) drawPlayer(dt);
+    if (state === 'dead') {
+      player.tumbleTimer = Math.max(0, player.tumbleTimer - dt);
+      if (player.tumbleTimer === 0) deathNode.hidden = false;
+    }
+    if (state !== 'paused') drawParticles(dt);
+    if (flash > 0 && state !== 'paused') {
       flash = Math.max(0, flash - dt);
       ctx.fillStyle = state === 'dead' ? `rgba(255,80,95,${flash * 0.55})` : `rgba(135,227,255,${flash * 0.16})`;
       ctx.fillRect(0, 0, W, H);
@@ -371,7 +567,7 @@
   function frame(now) {
     const dt = Math.min((now - lastFrame) / 1000, 0.05);
     lastFrame = now;
-    accumulator += dt;
+    if (state !== 'paused' && state !== 'dead') accumulator += dt;
     let steps = 0;
     while (accumulator >= TUNE.simulationStep && steps < 6) {
       update(TUNE.simulationStep);
@@ -379,19 +575,68 @@
       steps++;
     }
     if (steps === 6) accumulator = 0;
-    draw(dt);
+    draw(state === 'paused' ? 0 : dt);
     requestAnimationFrame(frame);
   }
 
   window.addEventListener('keydown', event => {
+    if (state === 'dead') {
+      if (event.code === 'Space' || event.code === 'KeyS') event.preventDefault();
+      if (event.code === 'KeyS' && !event.repeat) reset();
+      return;
+    }
+    if (state === 'countdown' && !event.repeat) {
+      startRun();
+      if (event.code === 'Escape' || event.code === 'KeyR') { event.preventDefault(); return; }
+    }
     if (event.code === 'Space') { if (!event.repeat) press(event); else event.preventDefault(); }
-    if (event.code === 'KeyR') { event.preventDefault(); reset(); }
+    if (event.code === 'KeyR') { event.preventDefault(); if (!event.repeat) reset(); }
+    if (event.code === 'Escape') { event.preventDefault(); if (!event.repeat) togglePause(); }
+    if (event.code === 'ControlLeft' || event.code === 'ControlRight') { event.preventDefault(); if (!event.repeat) jump(); }
+    if (event.code === 'ArrowUp' || event.code === 'KeyW') { event.preventDefault(); if (state === 'running') shortenInputs.add(event.code); }
+    if (event.code === 'ArrowDown' || event.code === 'KeyS') { event.preventDefault(); if (state === 'running') lengthenInputs.add(event.code); }
   });
-  window.addEventListener('keyup', event => { if (event.code === 'Space') unpress(event); });
+  window.addEventListener('keyup', event => {
+    if (event.code === 'Space') unpress(event);
+    shortenInputs.delete(event.code);
+    lengthenInputs.delete(event.code);
+  });
   window.addEventListener('pointerdown', press);
   window.addEventListener('pointerup', unpress);
   window.addEventListener('pointercancel', unpress);
-  window.addEventListener('blur', () => { pressedInputs.clear(); release(); });
+  for (const button of [jumpButton, shortenButton, lengthenButton, pauseButton, resumeButton, restartButton]) {
+    button.addEventListener('pointerdown', event => event.stopPropagation());
+  }
+  restartButton.addEventListener('click', event => {
+    if (state === 'dead' && event.detail > 0) reset();
+  });
+  jumpButton.addEventListener('click', jump);
+  pauseButton.addEventListener('click', togglePause);
+  resumeButton.addEventListener('click', togglePause);
+  for (const [button, inputs] of [[shortenButton, shortenInputs], [lengthenButton, lengthenInputs]]) {
+    button.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      if (state !== 'running') return;
+      button.setPointerCapture(event.pointerId);
+      inputs.add(`pointer-${event.pointerId}`);
+      button.classList.add('active');
+    });
+    const stopAdjusting = event => {
+      inputs.delete(`pointer-${event.pointerId}`);
+      if (!inputs.size) button.classList.remove('active');
+    };
+    button.addEventListener('pointerup', stopAdjusting);
+    button.addEventListener('pointercancel', stopAdjusting);
+    button.addEventListener('lostpointercapture', stopAdjusting);
+  }
+  window.addEventListener('blur', () => {
+    pressedInputs.clear();
+    shortenInputs.clear();
+    lengthenInputs.clear();
+    shortenButton.classList.remove('active');
+    lengthenButton.classList.remove('active');
+    release();
+  });
   window.addEventListener('resize', resize);
   resize();
   requestAnimationFrame(frame);
