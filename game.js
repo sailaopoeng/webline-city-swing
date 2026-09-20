@@ -57,6 +57,8 @@
   const lengthenButton = document.getElementById('lengthen-button');
   const controlsNode = document.querySelector('.game-controls');
   const hintNode = document.getElementById('hint');
+  const shellNode = document.querySelector('.game-shell');
+  const countdownPauseButton = document.getElementById('countdown-pause-button');
   const glideHud = document.getElementById('glide-hud');
   const TAU = Math.PI * 2;
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -78,6 +80,11 @@
   bestNode.textContent = formatScore(best);
 
   function formatScore(n) { return String(Math.floor(n)).padStart(4, '0'); }
+
+  function placeHint(target) {
+    target.appendChild(hintNode);
+    hintNode.classList.remove('faded');
+  }
 
   function updateGlideHud() {
     if (!glideHud) return;
@@ -115,6 +122,7 @@
 
   function reset() {
     state = 'countdown';
+    placeHint(countdownNode);
     countdownRemaining = TUNE.countdownSeconds;
     pressedInputs.clear();
     webButtonInputs.clear();
@@ -285,6 +293,7 @@
     if (state !== 'countdown') return;
     countdownRemaining = 0;
     state = 'running';
+    placeHint(shellNode);
     countdownNode.hidden = true;
   }
 
@@ -292,6 +301,7 @@
     if (state === 'dead') return;
     if (state === 'paused') {
       state = resumeState;
+      placeHint(state === 'countdown' ? countdownNode : shellNode);
       pauseNode.hidden = true;
       countdownNode.hidden = state !== 'countdown';
       pauseButton.firstChild.textContent = 'PAUSE ';
@@ -309,6 +319,7 @@
     shortenButton.classList.remove('active');
     lengthenButton.classList.remove('active');
     release(false);
+    placeHint(pauseNode);
     countdownNode.hidden = true;
     pauseNode.hidden = false;
     pauseButton.firstChild.textContent = 'RESUME ';
@@ -321,7 +332,7 @@
     const key = event && event.code === 'Space' ? 'space' : `pointer-${event?.pointerId ?? 0}`;
     if (pressedInputs.has(key)) return;
     pressedInputs.add(key);
-    hintNode.classList.add('faded');
+    if (hintNode) hintNode.classList.add('faded');
     attach();
   }
 
@@ -957,7 +968,7 @@
   window.addEventListener('pointerdown', press);
   window.addEventListener('pointerup', unpress);
   window.addEventListener('pointercancel', unpress);
-  for (const button of [webButton, jumpButton, shortenButton, lengthenButton, pauseButton, resumeButton, restartButton]) {
+  for (const button of [webButton, jumpButton, shortenButton, lengthenButton, pauseButton, resumeButton, restartButton, countdownPauseButton]) {
     button.addEventListener('pointerdown', event => event.stopPropagation());
   }
   webButton.addEventListener('pointerdown', event => {
@@ -982,6 +993,7 @@
   jumpButton.addEventListener('click', () => { startRun(); jump(); });
   pauseButton.addEventListener('click', togglePause);
   resumeButton.addEventListener('click', togglePause);
+  countdownPauseButton.addEventListener('click', togglePause);
   for (const [button, inputs] of [[shortenButton, shortenInputs], [lengthenButton, lengthenInputs]]) {
     button.addEventListener('pointerdown', event => {
       event.preventDefault();

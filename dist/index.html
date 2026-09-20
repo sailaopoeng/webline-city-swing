@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#090e1d">
   <link rel="icon" href="data:,">
   <title>Webline — City Swing</title>
-  <link rel="stylesheet" href="style.css">
-  <script src="game.js" defer></script>
+  <link rel="stylesheet" href="style.css?v=20260920-controls-3">
+  <script src="game.js?v=20260920-controls-3" defer></script>
 </head>
 <body>
   <main class="game-shell" aria-label="Webline city swinging game">
@@ -26,7 +26,7 @@
       <button type="button" id="pause-button">PAUSE <span>ESC</span></button>
     </div>
     <div class="state-screen" id="countdown" role="status" aria-live="polite" hidden>
-      <div class="state-card"><span class="eyebrow">GET READY</span><strong class="countdown-number" id="countdown-number">3</strong><span class="state-note desktop-note">Press any key or tap to start now</span><span class="state-note mobile-note">Tap to start now</span><span class="state-note desktop-note">Hold Space or touch the city to web</span><span class="state-note mobile-note">Hold WEB to swing, tap JUMP to leap</span></div>
+      <div class="state-card"><span class="eyebrow">GET READY</span><strong class="countdown-number" id="countdown-number">3</strong><span class="state-note desktop-note">Press any key or tap to start now</span><span class="state-note mobile-note">Tap to start now</span><button type="button" id="countdown-pause-button" class="primary-button">Pause</button></div>
     </div>
     <div class="state-screen" id="pause" hidden>
       <div class="state-card"><span class="eyebrow">BREAK TIME</span><h1>Paused</h1><button type="button" id="resume-button" class="primary-button">Resume</button><span class="state-note desktop-note">Press Esc to resume</span></div>
