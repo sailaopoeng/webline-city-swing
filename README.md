@@ -56,7 +56,6 @@ Then open [http://localhost:8000](http://localhost:8000).
 | `game.js` | Input, world generation, physics, collisions, camera, and drawing |
 | `docs/screenshot1.png` | Gameplay screenshot used in the README |
 | `docs/screenshot.png` | End screen screenshot used in the README |
-| `dist/` | Static deployment copy for hosting |
 | `infra/aws/` | AWS S3 + CloudFront hosting template and setup guide |
 | `.github/workflows/deploy-aws.yml` | Deploys to AWS on push to `main` |
 

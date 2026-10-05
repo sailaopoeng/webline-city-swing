@@ -4,9 +4,7 @@
 
 Open `index.html` in a modern browser, or run `python3 -m http.server` here. There is no build step, dependency, backend, or game engine. `index.html` owns the canvas and HUD; `style.css` owns the responsive overlay; `game.js` is one small IIFE with functions for input, world generation, physics, collision, camera, and drawing. Keep the project plain HTML/CSS/JavaScript and Canvas unless the scope changes.
 
-For Sites hosting, root `index.html`, `style.css`, and `game.js` remain the editable source; `dist/` is their byte-for-byte static deployment copy. Sync those three files into `dist/` before each Sites commit/publish. `.openai/hosting.json` points Sites at `dist/`; do not put secrets in it.
-
-AWS hosting (S3 + CloudFront, independent of Sites) is defined in `infra/aws/webline-site.yaml` and deployed by `.github/workflows/deploy-aws.yml` on pushes to `main`; it uploads the root `index.html`, `style.css`, and `game.js` directly. Setup and domain cutover steps are in `infra/aws/README.md`. New static assets must be added to that workflow's staging step and `paths` filter. Never commit AWS keys; the workflow uses GitHub OIDC and repository variables.
+Hosting is AWS only (the ChatGPT Sites copy in `dist/` and `.openai/hosting.json` was retired). S3 + CloudFront is defined in `infra/aws/webline-site.yaml` and deployed by `.github/workflows/deploy-aws.yml` on pushes to `main`; it uploads the root `index.html`, `style.css`, and `game.js` directly. Setup and domain cutover steps are in `infra/aws/README.md`. New static assets must be added to that workflow's staging step and `paths` filter. Never commit AWS keys; the workflow uses GitHub OIDC and repository variables.
 
 ## Physics and game loop
 

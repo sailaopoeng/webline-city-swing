@@ -29,44 +29,93 @@
     glideSwingCount: 10,
     spikeBase: 18,
     spikeGap: 6,
-    hazardChance: 0.68,
     swingPump: 520,
     maxZoomOut: 0.1,
     trailLength: 20,
-    maxDifficulty: 2.5,
-    difficultyRamp: 2000,
+    // Levels: each [level 1, level 100] pair is interpolated linearly, about 1% harder per level.
+    levelCount: 100,
+    levelBaseLength: 1000, // metres (10 px each) to the level 1 finish gate
+    levelLengthStep: 15, // extra metres per level
+    attemptsPerLevel: 5,
+    parSpeed: 40, // metres per second; beating length / parSpeed earns a time bonus and stars
+    levelClearAutoSeconds: 6,
+    gapScale: [1, 2.3], // multiplies buildingSpacing
+    hazardChance: [0.45, 0.92],
+    tripleSpikeChance: [0.25, 0.85],
+    roofShrink: [0, 90],
+    roofDrop: [0, 0.08], // fraction of screen height
   });
+
+  // One sky and building palette per ten levels; the last entry is endless mode.
+  const DISTRICTS = [
+    { name: 'Downtown', sky: ['#091022', '#17243c', '#243249'], far: '#1c2b40', near: '#1a293b', body: '#101b2e', ledge: '#30425b', trim: '#1d3046', lit: '#e5bc7980', unlit: '#51627d35' },
+    { name: 'Harbor Lights', sky: ['#06141f', '#0f2c3d', '#1b4152'], far: '#123444', near: '#10303e', body: '#0b1d27', ledge: '#2a4f5c', trim: '#163845', lit: '#9fe7e080', unlit: '#3f6b7535' },
+    { name: 'Old Town', sky: ['#140d1f', '#2b1d36', '#3d2a40'], far: '#2a1f37', near: '#271c31', body: '#171222', ledge: '#4a3a52', trim: '#2c2236', lit: '#f2c27a90', unlit: '#6a587535' },
+    { name: 'Neon District', sky: ['#0d0221', '#240b45', '#3a0f55'], far: '#2a0f4a', near: '#260c40', body: '#12062a', ledge: '#4c1f78', trim: '#2d1250', lit: '#ff5be1a0', unlit: '#6b3d9a35' },
+    { name: 'Ironworks', sky: ['#120f0c', '#2b2118', '#43301f'], far: '#2e241b', near: '#2a2018', body: '#16110d', ledge: '#4d3a2a', trim: '#2f241a', lit: '#ffad5c90', unlit: '#7a604535' },
+    { name: 'Financial Row', sky: ['#08101a', '#1a2a3a', '#2d4256'], far: '#1f3142', near: '#1c2d3d', body: '#0e1824', ledge: '#3a5068', trim: '#1e3245', lit: '#cfe8ff90', unlit: '#56708a35' },
+    { name: 'Rain Quarter', sky: ['#0a0f14', '#18232c', '#24323b'], far: '#1a2630', near: '#17222b', body: '#0d141a', ledge: '#33434f', trim: '#1c2a33', lit: '#a7d3ff80', unlit: '#4d607035' },
+    { name: 'Sunset Heights', sky: ['#1a0f2e', '#5a2a4a', '#c0605a'], far: '#4a2440', near: '#3e1f37', body: '#1d1024', ledge: '#6a3550', trim: '#3a1c33', lit: '#ffd27aa0', unlit: '#8a4f6a35' },
+    { name: 'Storm Front', sky: ['#05070c', '#141a26', '#222a38'], far: '#161c28', near: '#131924', body: '#0a0e15', ledge: '#2a3242', trim: '#161d29', lit: '#e8f0ff80', unlit: '#47526535' },
+    { name: 'Summit Spires', sky: ['#020617', '#0c1f3f', '#1b3b63'], far: '#13284a', near: '#112442', body: '#081226', ledge: '#2a4a78', trim: '#14284a', lit: '#fff1b0a0', unlit: '#4a6a9a35' },
+    { name: 'Endless Skyline', sky: ['#04020a', '#1a0b2e', '#3b1053'], far: '#24103a', near: '#1f0d33', body: '#0e0618', ledge: '#5a2d82', trim: '#2e1548', lit: '#ffd166b0', unlit: '#5a3a7a35' },
+  ];
+  const START_X = 116;
+  const STORAGE = { progress: 'webline-progress', bestPoints: 'webline-best-points', bestLevel: 'webline-best-level' };
 
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
-  const scoreNode = document.getElementById('score');
-  const bestNode = document.getElementById('best');
-  const finalNode = document.getElementById('final-score');
-  const deathNode = document.getElementById('death');
-  const deathDancerCanvas = document.getElementById('death-dancer');
+  const $ = id => document.getElementById(id);
+  const scoreNode = $('score');
+  const bestNode = $('best');
+  const levelNode = $('level');
+  const levelSubNode = $('level-sub');
+  const progressNode = $('level-progress');
+  const progressFillNode = $('progress-fill');
+  const levelBanner = $('level-banner');
+  const finalNode = $('final-score');
+  const deathNode = $('death');
+  const deathEyebrowNode = $('death-eyebrow');
+  const deathDetailNode = $('death-detail');
+  const deathTitleNode = $('death-title');
+  const deathDancerCanvas = $('death-dancer');
   const deathDancerCtx = deathDancerCanvas ? deathDancerCanvas.getContext('2d') : null;
-  const restartButton = document.getElementById('restart-button');
-  const countdownNode = document.getElementById('countdown');
-  const countdownNumberNode = document.getElementById('countdown-number');
-  const pauseNode = document.getElementById('pause');
-  const pauseButton = document.getElementById('pause-button');
-  const resumeButton = document.getElementById('resume-button');
-  const webButton = document.getElementById('web-button');
-  const jumpButton = document.getElementById('jump-button');
-  const shortenButton = document.getElementById('shorten-button');
-  const lengthenButton = document.getElementById('lengthen-button');
+  const restartButton = $('restart-button');
+  const restartLabelNode = $('restart-label');
+  const clearNode = $('level-clear');
+  const clearDancerCanvas = $('clear-dancer');
+  const clearDancerCtx = clearDancerCanvas ? clearDancerCanvas.getContext('2d') : null;
+  const nextButton = $('next-button');
+  const countdownNode = $('countdown');
+  const countdownNumberNode = $('countdown-number');
+  const countdownLevelNode = $('countdown-level');
+  const countdownDistrictNode = $('countdown-district');
+  const countdownAttemptNode = $('countdown-attempt');
+  const pauseNode = $('pause');
+  const pauseButton = $('pause-button');
+  const resumeButton = $('resume-button');
+  const startOverButtons = document.querySelectorAll('.start-over-button');
+  const webButton = $('web-button');
+  const jumpButton = $('jump-button');
+  const shortenButton = $('shorten-button');
+  const lengthenButton = $('lengthen-button');
   const controlsNode = document.querySelector('.game-controls');
-  const hintNode = document.getElementById('hint');
+  const hintNode = $('hint');
   const shellNode = document.querySelector('.game-shell');
-  const countdownPauseButton = document.getElementById('countdown-pause-button');
-  const glideHud = document.getElementById('glide-hud');
+  const countdownPauseButton = $('countdown-pause-button');
+  const glideHud = $('glide-hud');
+  const comboHud = $('combo-hud');
   const TAU = Math.PI * 2;
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const rand = (min, max) => min + Math.random() * (max - min);
+  const lerp = (a, b, t) => a + (b - a) * t;
 
-  let W = 0, H = 0, dpr = 1, player, rope, buildings, particles, camera, nextBuildingX, swings;
+  let W = 0, H = 0, dpr = 1, player, rope, buildings, particles, popups, camera, nextBuildingX, swings;
   let state = 'countdown', resumeState = 'running', countdownRemaining = 0;
-  let retryAt = 0, elapsed = 0, score = 0, best = 0, lastMilestone = 0, zoom = 1;
+  let retryAt = 0, elapsed = 0, zoom = 1;
+  // Points: banked from cleared levels, plus this attempt's distance and bonus points.
+  let level = 1, attemptsLeft = TUNE.attemptsPerLevel, bankedPoints = 0, points = 0, levelDistance = 0, bonusPoints = 0, comboChain = 0;
+  let bestPoints = 0, bestLevel = 0, gateX = Infinity, goalPlaced = false, levelResult = null, levelClearTimer = 0;
   const pressedInputs = new Set();
   const webButtonInputs = new Set();
   const shortenInputs = new Set();
@@ -76,10 +125,75 @@
   let accumulator = 0, lastFrame = 0, flash = 0;
   const attachEffects = [];
 
-  try { best = Number(localStorage.getItem('webline-best')) || 0; } catch (_) { /* Private browsing can disable storage. */ }
-  bestNode.textContent = formatScore(best);
+  function loadNumber(key) {
+    try { return Number(localStorage.getItem(key)) || 0; } catch (_) { return 0; } // Private browsing can disable storage.
+  }
+  function store(key, value) {
+    try { localStorage.setItem(key, value); } catch (_) { /* Storage is optional. */ }
+  }
+  function saveProgress(savedLevel = level, banked = bankedPoints, attempts = attemptsLeft) {
+    store(STORAGE.progress, JSON.stringify({ level: savedLevel, banked: Math.floor(banked), attempts }));
+  }
+  function loadProgress() {
+    const requested = Number(new URLSearchParams(location.search).get('level'));
+    if (requested >= 1) { // Testing shortcut: ?level=N starts a fresh run at level N.
+      level = clamp(Math.floor(requested), 1, TUNE.levelCount + 1);
+      return;
+    }
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE.progress));
+      if (saved && saved.level >= 1 && saved.attempts >= 1) {
+        level = clamp(Math.floor(saved.level), 1, TUNE.levelCount + 1);
+        bankedPoints = Math.max(0, Math.floor(saved.banked) || 0);
+        attemptsLeft = clamp(Math.floor(saved.attempts), 1, TUNE.attemptsPerLevel);
+      }
+    } catch (_) { /* Missing or unreadable progress starts at level 1. */ }
+  }
 
-  function formatScore(n) { return String(Math.floor(n)).padStart(4, '0'); }
+  bestPoints = loadNumber(STORAGE.bestPoints);
+  bestLevel = loadNumber(STORAGE.bestLevel);
+  loadProgress();
+  bestNode.textContent = formatPoints(bestPoints);
+
+  function formatPoints(n) { return String(Math.floor(n)).padStart(6, '0'); }
+  function isEndless() { return level > TUNE.levelCount; }
+  function district() { return DISTRICTS[isEndless() ? DISTRICTS.length - 1 : Math.min(DISTRICTS.length - 2, Math.floor((level - 1) / 10))]; }
+  function levelProgress() { return clamp((level - 1) / (TUNE.levelCount - 1), 0, 1); }
+  function levelScaled(range) { return lerp(range[0], range[1], levelProgress()); }
+  function levelLength() { return TUNE.levelBaseLength + TUNE.levelLengthStep * (Math.min(level, TUNE.levelCount) - 1); }
+  function levelMultiplier() { return 1 + 0.1 * (level - 1); }
+  function runPoints() { return Math.floor(levelDistance * levelMultiplier() + bonusPoints); }
+  function vibrate(pattern) {
+    try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (_) { /* Haptics are optional. */ }
+  }
+
+  function updateBest() {
+    if (points > bestPoints) {
+      bestPoints = points;
+      store(STORAGE.bestPoints, String(Math.floor(bestPoints)));
+    }
+    bestNode.textContent = formatPoints(bestPoints);
+  }
+
+  function updateHud() {
+    points = bankedPoints + runPoints();
+    scoreNode.textContent = formatPoints(points);
+    levelNode.textContent = isEndless() ? '∞' : String(level);
+    levelSubNode.textContent = isEndless() ? `${Math.floor(levelDistance)} M` : `TRY ${TUNE.attemptsPerLevel - attemptsLeft + 1}/${TUNE.attemptsPerLevel}`;
+    progressNode.hidden = isEndless();
+    if (!isEndless()) progressFillNode.style.transform = `scaleX(${clamp(levelDistance / ((gateX - START_X) / 10), 0, 1)})`;
+    if (comboHud) {
+      comboHud.hidden = comboChain < 2 || state !== 'running';
+      if (!comboHud.hidden) comboHud.textContent = `COMBO ×${comboChain}`;
+    }
+  }
+
+  function addPoints(amount, label, x, y, color = '#ffd166') {
+    const value = Math.round(amount * levelMultiplier());
+    if (value <= 0) return;
+    bonusPoints += value;
+    popups.push({ x, y, text: `+${value} ${label}`, life: 1.1, maxLife: 1.1, color });
+  }
 
   function placeHint(target) {
     target.appendChild(hintNode);
@@ -105,10 +219,6 @@
     }
   }
 
-  function getDifficulty() {
-    return 1 + Math.min(score / TUNE.difficultyRamp, TUNE.maxDifficulty - 1);
-  }
-
   function resize() {
     const rect = canvas.getBoundingClientRect();
     W = rect.width;
@@ -117,64 +227,105 @@
     canvas.width = Math.round(W * dpr);
     canvas.height = Math.round(H * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    reset(); // Geometry scales to the screen height, so resize begins a clean run.
+    // Geometry scales to the screen height, so resize restarts the level without using an attempt.
+    if (state === 'levelclear') advanceLevel();
+    else if (state === 'dead') continueAfterDeath();
+    else startLevel();
   }
 
-  function reset() {
-    state = 'countdown';
-    placeHint(countdownNode);
-    countdownRemaining = TUNE.countdownSeconds;
+  function clearHeldInputs() {
     pressedInputs.clear();
     webButtonInputs.clear();
     webButton.classList.remove('active');
     shortenInputs.clear();
     lengthenInputs.clear();
+    leftInputs.clear();
+    rightInputs.clear();
     shortenButton.classList.remove('active');
     lengthenButton.classList.remove('active');
+  }
+
+  function newGame() {
+    level = 1;
+    bankedPoints = 0;
+    attemptsLeft = TUNE.attemptsPerLevel;
+    saveProgress();
+    startLevel();
+  }
+
+  function advanceLevel() {
+    level++;
+    attemptsLeft = TUNE.attemptsPerLevel;
+    saveProgress();
+    startLevel();
+  }
+
+  function continueAfterDeath() {
+    if (!isEndless() && attemptsLeft <= 0) newGame();
+    else startLevel();
+  }
+
+  function startLevel() {
+    state = 'countdown';
+    placeHint(countdownNode);
+    countdownRemaining = TUNE.countdownSeconds;
+    clearHeldInputs();
     rope = null;
     buildings = [];
     particles = [];
+    popups = [];
     attachEffects.length = 0;
     camera = { x: 0 };
     elapsed = 0;
-    score = 0;
+    levelDistance = 0;
+    bonusPoints = 0;
+    comboChain = 0;
     swings = 0;
-    lastMilestone = 0;
     zoom = 1;
     flash = 0;
     retryAt = 0;
     accumulator = 0;
-    leftInputs.clear();
-    rightInputs.clear();
+    levelResult = null;
+    levelClearTimer = 0;
+    gateX = isEndless() ? Infinity : START_X + levelLength() * 10;
+    goalPlaced = isEndless();
     // A safe runway gives the player time to try Jump or web before the first gap.
     const startingRoof = makeBuilding(-260, 1180, H * 0.72, 0);
     const mastY = startingRoof.top - Math.min(250, H * 0.28);
     startingRoof.anchors[0] = { x: 276, y: mastY };
     startingRoof.anchors[1] = { x: startingRoof.x + startingRoof.w - 150, y: mastY };
     buildings.push(startingRoof);
-    player = { x: 116, y: startingRoof.top - TUNE.playerRadius, px: 116, py: startingRoof.top - TUNE.playerRadius, vx: TUNE.horizontalStartingSpeed, vy: 0, grounded: true, landingTimer: 0, tumbleTimer: 0, tumbleAngle: 0, pose: null, gliding: false, trail: [], speed: 0, dancing: false, danceTimer: 0 };
+    player = { x: START_X, y: startingRoof.top - TUNE.playerRadius, px: START_X, py: startingRoof.top - TUNE.playerRadius, vx: TUNE.horizontalStartingSpeed, vy: 0, grounded: true, landingTimer: 0, tumbleTimer: 0, tumbleAngle: 0, pose: null, gliding: false, trail: [], speed: 0, dancing: false, danceTimer: 0 };
     nextBuildingX = startingRoof.x + startingRoof.w + rand(...TUNE.buildingSpacing);
     generateAhead();
-    scoreNode.textContent = '0000';
+    updateHud();
     if (glideHud) glideHud.hidden = true;
     deathNode.hidden = true;
-    if (deathDancerCtx) {
-      deathDancerCtx.setTransform(1, 0, 0, 1, 0, 0);
-      deathDancerCtx.clearRect(0, 0, deathDancerCanvas.width, deathDancerCanvas.height);
+    clearNode.hidden = true;
+    levelBanner.hidden = true;
+    for (const dancer of [[deathDancerCtx, deathDancerCanvas], [clearDancerCtx, clearDancerCanvas]]) {
+      if (!dancer[0]) continue;
+      dancer[0].setTransform(1, 0, 0, 1, 0, 0);
+      dancer[0].clearRect(0, 0, dancer[1].width, dancer[1].height);
     }
+    resetStartOver();
     controlsNode.classList.remove('hidden-controls');
     pauseNode.hidden = true;
     pauseButton.firstChild.textContent = 'PAUSE ';
+    countdownLevelNode.textContent = isEndless() ? 'ENDLESS' : `LEVEL ${level}`;
+    countdownDistrictNode.textContent = district().name.toUpperCase();
+    countdownAttemptNode.textContent = isEndless()
+      ? 'Max difficulty · swing as far as you can'
+      : `Goal ${levelLength()} m · Attempt ${TUNE.attemptsPerLevel - attemptsLeft + 1} of ${TUNE.attemptsPerLevel}`;
     countdownNode.hidden = false;
     countdownNumberNode.textContent = String(Math.ceil(countdownRemaining));
     lastFrame = performance.now();
   }
 
-  function makeBuilding(x, width, top, index) {
-    const difficulty = getDifficulty();
-    if (index > 1) {
-      width = clamp(width - (difficulty - 1) * 40, 220, 600);
-      top = clamp(top + (difficulty - 1) * H * 0.06, H * 0.55, H - 95);
+  function makeBuilding(x, width, top, index, finish = false) {
+    if (index > 1 && !finish) {
+      width = clamp(width - levelScaled(TUNE.roofShrink), 220, 600);
+      top = clamp(top + levelScaled(TUNE.roofDrop) * H, H * 0.55, H - 95);
     }
     const anchors = [];
     // Each roof carries a visible mast node. Wide roofs carry two.
@@ -184,24 +335,33 @@
       anchors.push({ x: ax, y: clamp(top - rand(280, 340), H * 0.13, H * 0.28) });
     }
     const hazards = [];
-    if (index > 1 && Math.random() < Math.min(TUNE.hazardChance * difficulty, 0.95)) {
-      const spikeCount = Math.random() < 0.5 ? 2 : 3;
+    if (index > 1 && !finish && Math.random() < levelScaled(TUNE.hazardChance)) {
+      const spikeCount = Math.random() < levelScaled(TUNE.tripleSpikeChance) ? 3 : 2;
       const hazardWidth = spikeCount * TUNE.spikeBase + (spikeCount - 1) * TUNE.spikeGap;
       const hx = x + width * rand(0.18, 0.82) - hazardWidth / 2;
       const clampedHx = clamp(hx, x + 14, x + width - hazardWidth - 14);
       hazards.push({ x: clampedHx, spikeCount, spikeBase: TUNE.spikeBase, spikeGap: TUNE.spikeGap, h: 26, type: 'spikes' });
     }
-    return { x, w: width, top, anchors, hazards, index };
+    return { x, w: width, top, anchors, hazards, index, finish };
   }
 
   function generateAhead() {
     while (nextBuildingX < player.x + W * 2.5 + 500) {
       const index = buildings.length;
-      const width = rand(285, 485);
-      const top = clamp(H * rand(0.66, 0.81), H * 0.55, H - 95);
-      const building = makeBuilding(nextBuildingX, width, top, index);
+      let building;
+      if (!goalPlaced && nextBuildingX + 635 >= gateX) {
+        // A wide, hazard-free finish roof keeps the gate at the level's goal distance.
+        const width = Math.max(gateX - nextBuildingX + 320, 520);
+        building = makeBuilding(nextBuildingX, width, clamp(H * 0.7, H * 0.55, H - 95), index, true);
+        gateX = Math.max(gateX, building.x + 150);
+        goalPlaced = true;
+      } else {
+        const width = rand(285, 485);
+        const top = clamp(H * rand(0.66, 0.81), H * 0.55, H - 95);
+        building = makeBuilding(nextBuildingX, width, top, index);
+      }
       buildings.push(building);
-      const gap = rand(TUNE.buildingSpacing[0], TUNE.buildingSpacing[1]) * getDifficulty();
+      const gap = rand(TUNE.buildingSpacing[0], TUNE.buildingSpacing[1]) * levelScaled(TUNE.gapScale);
       nextBuildingX += building.w + gap;
     }
     while (buildings.length > 4 && buildings[0].x + buildings[0].w < camera.x - 500) buildings.shift();
@@ -259,7 +419,12 @@
     const point = findAnchor();
     if (!point) return;
     rope = { x: point.x, y: point.y, length: point.length * 0.985 };
-    player.gliding = false;
+    endGlide();
+    if (!player.grounded) {
+      // Chaining webs without touching a roof builds a combo.
+      comboChain++;
+      if (comboChain >= 2) addPoints(10 * Math.min(comboChain, 10), `COMBO ×${comboChain}`, point.x, point.y - 18, '#9beaf3');
+    }
     // Ground contact persists until movement actually lifts the player, so Space + V can jump.
     burst(point.x, point.y, '#96ecff', 9, 75);
     attachEffects.push({ x: point.x, y: point.y, radius: 8, maxRadius: 55, life: 0.35, maxLife: 0.35, color: '#b3f2ff' });
@@ -274,11 +439,19 @@
     if (countAsSwing && !player.grounded) swings++;
     if (swings >= TUNE.glideSwingCount && !player.grounded) {
       player.gliding = true;
+      player.glideStartX = player.x;
       swings = 0;
       if (Math.abs(player.vx) < TUNE.glideMinSpeed) {
         player.vx = Math.sign(player.vx || 1) * TUNE.glideMinSpeed;
       }
     }
+  }
+
+  function endGlide() {
+    if (!player.gliding) return;
+    player.gliding = false;
+    const meters = (player.x - player.glideStartX) / 10;
+    if (meters >= 10) addPoints(meters, 'GLIDE', player.x, player.y - 30, '#b8f8ff');
   }
 
   function jump() {
@@ -295,10 +468,45 @@
     state = 'running';
     placeHint(shellNode);
     countdownNode.hidden = true;
+    levelBanner.textContent = `${isEndless() ? 'ENDLESS' : `LEVEL ${level}`} · ${district().name.toUpperCase()}`;
+    levelBanner.hidden = false;
+    levelBanner.classList.remove('show');
+    void levelBanner.offsetWidth; // Restart the fade animation.
+    levelBanner.classList.add('show');
+  }
+
+  // R restarts the level. Once play has begun it costs an attempt; the last one ends the run instead.
+  function restartLevel() {
+    if (state === 'countdown' || (state === 'paused' && resumeState === 'countdown')) { startLevel(); return; }
+    if (state !== 'running' && state !== 'paused') return;
+    if (isEndless() || attemptsLeft > 1) {
+      if (!isEndless()) { attemptsLeft--; saveProgress(); }
+      startLevel();
+      return;
+    }
+    if (state === 'paused') togglePause();
+    die();
+  }
+
+  // Start-over buttons need a second tap within three seconds so progress is not lost by accident.
+  let startOverArmedUntil = 0;
+  function resetStartOver() {
+    startOverArmedUntil = 0;
+    for (const button of startOverButtons) button.textContent = 'Start over from level 1';
+  }
+  function startOver(event) {
+    event.stopPropagation();
+    if (performance.now() > startOverArmedUntil) {
+      startOverArmedUntil = performance.now() + 3000;
+      for (const button of startOverButtons) button.textContent = 'Tap again to lose progress';
+      setTimeout(() => { if (performance.now() > startOverArmedUntil) resetStartOver(); }, 3100);
+      return;
+    }
+    newGame();
   }
 
   function togglePause() {
-    if (state === 'dead') return;
+    if (state === 'dead' || state === 'levelclear') return;
     if (state === 'paused') {
       state = resumeState;
       placeHint(state === 'countdown' ? countdownNode : shellNode);
@@ -311,14 +519,9 @@
     }
     resumeState = state;
     state = 'paused';
-    pressedInputs.clear();
-    webButtonInputs.clear();
-    webButton.classList.remove('active');
-    shortenInputs.clear();
-    lengthenInputs.clear();
-    shortenButton.classList.remove('active');
-    lengthenButton.classList.remove('active');
+    clearHeldInputs();
     release(false);
+    resetStartOver();
     placeHint(pauseNode);
     countdownNode.hidden = true;
     pauseNode.hidden = false;
@@ -327,7 +530,7 @@
 
   function press(event) {
     if (event && event.cancelable) event.preventDefault();
-    if (state === 'paused' || state === 'dead') return;
+    if (state === 'paused' || state === 'dead' || state === 'levelclear') return;
     startRun();
     const key = event && event.code === 'Space' ? 'space' : `pointer-${event?.pointerId ?? 0}`;
     if (pressedInputs.has(key)) return;
@@ -400,21 +603,81 @@
     player.tumbleAngle = 0;
     player.dancing = false;
     player.danceTimer = 0;
-    pressedInputs.clear();
-    webButtonInputs.clear();
-    webButton.classList.remove('active');
+    clearHeldInputs();
     if (glideHud) glideHud.hidden = true;
     release(false);
     burst(player.x, player.y, '#ff626b', 24, 210);
     flash = 0.28;
-    finalNode.textContent = formatScore(score);
+    vibrate(120);
+    updateHud();
+    updateBest();
+    if (!isEndless()) {
+      attemptsLeft--;
+      // Out of attempts: the saved run already points back at level 1.
+      if (attemptsLeft > 0) saveProgress();
+      else saveProgress(1, 0, TUNE.attemptsPerLevel);
+    }
+    finalNode.textContent = formatPoints(points);
+    deathDetailNode.textContent = isEndless()
+      ? `Endless · ${Math.floor(levelDistance)} m`
+      : `Level ${level} · ${Math.floor(levelDistance)} / ${levelLength()} m`;
+    const outOfAttempts = !isEndless() && attemptsLeft <= 0;
+    deathEyebrowNode.textContent = isEndless() ? 'ENDLESS RUN OVER' : outOfAttempts ? 'OUT OF ATTEMPTS' : 'SWING ENDED';
+    deathTitleNode.textContent = isEndless() ? 'One more swing?'
+      : outOfAttempts ? 'Back to level 1'
+      : `${attemptsLeft} ${attemptsLeft === 1 ? 'attempt' : 'attempts'} left`;
+    restartLabelNode.textContent = isEndless() ? 'Swing endless again' : outOfAttempts ? 'Start from level 1' : `Retry level ${level}`;
+    for (const button of startOverButtons) if (deathNode.contains(button)) button.hidden = outOfAttempts || level === 1;
     deathNode.hidden = true;
     controlsNode.classList.add('hidden-controls');
-    if (score > best) {
-      best = score;
-      bestNode.textContent = formatScore(best);
-      try { localStorage.setItem('webline-best', String(best)); } catch (_) { /* Storage is optional. */ }
-    }
+  }
+
+  function clearLevel() {
+    state = 'levelclear';
+    clearHeldInputs();
+    release(false);
+    endGlide();
+    const par = levelLength() / TUNE.parSpeed;
+    const clearBonus = 500 + 50 * level;
+    const timeBonus = Math.round(Math.max(0, par - elapsed) * 20 * levelMultiplier());
+    const run = runPoints();
+    levelResult = {
+      level, run, clearBonus, timeBonus, total: run + clearBonus + timeBonus,
+      stars: elapsed <= par * 0.8 ? 3 : elapsed <= par ? 2 : 1,
+      time: elapsed, par, final: level === TUNE.levelCount,
+    };
+    bankedPoints += levelResult.total;
+    bonusPoints = 0;
+    levelDistance = 0;
+    points = bankedPoints;
+    updateBest();
+    if (level > bestLevel) { bestLevel = level; store(STORAGE.bestLevel, String(bestLevel)); }
+    saveProgress(level + 1, bankedPoints, TUNE.attemptsPerLevel);
+    scoreNode.textContent = formatPoints(points);
+    progressFillNode.style.transform = 'scaleX(1)';
+    if (glideHud) glideHud.hidden = true;
+    if (comboHud) comboHud.hidden = true;
+    controlsNode.classList.add('hidden-controls');
+    flash = 0.3;
+    vibrate([40, 60, 90]);
+    spawnConfetti(player.x, player.y - 20, 110);
+    spawnConfetti(camera.x + W * 0.15, H * 0.75, 70);
+    spawnConfetti(camera.x + W * 0.85, H * 0.75, 70);
+    $('clear-eyebrow').textContent = levelResult.final ? 'CITY CONQUERED' : `LEVEL ${level} CLEAR`;
+    $('clear-title').textContent = levelResult.final ? 'All 100 levels cleared!' : ['Nice swinging!', 'Great run!', 'Perfect line!'][levelResult.stars - 1];
+    $('clear-stars').textContent = '★'.repeat(levelResult.stars) + '☆'.repeat(3 - levelResult.stars);
+    $('clear-stars').setAttribute('aria-label', `${levelResult.stars} of 3 stars`);
+    $('clear-time').textContent = `${elapsed.toFixed(1)} s / par ${Math.round(par)} s`;
+    $('clear-run').textContent = `+${levelResult.run}`;
+    $('clear-bonus').textContent = `+${clearBonus}`;
+    $('clear-time-bonus').textContent = `+${timeBonus}`;
+    $('clear-total').textContent = formatPoints(points);
+    $('clear-note').textContent = levelResult.final ? 'Endless mode unlocked. Max difficulty, no finish line.' : `Next: ${DISTRICTS[Math.min(DISTRICTS.length - 2, Math.floor(level / 10))].name}`;
+    $('next-label').textContent = levelResult.final ? 'Swing endless' : `Level ${level + 1}`;
+  }
+
+  function finishLevelClear() {
+    if (state === 'levelclear' && levelClearTimer >= 0.8) advanceLevel();
   }
 
   function collide() {
@@ -432,6 +695,13 @@
             const c = { x: bx + hazard.spikeBase * 0.5, y: building.top - hazard.h };
             if (hitCircleTriangle(player.x, player.y, r, a, b, c)) { die(); return; }
           }
+          // Clearing the spike tips by a hair earns a one-time near-miss bonus.
+          const clearance = building.top - hazard.h - (player.y + r);
+          const hazardEnd = hazard.x + hazard.spikeCount * (hazard.spikeBase + hazard.spikeGap);
+          if (!hazard.nearMiss && clearance >= 0 && clearance < 22 && player.x > hazard.x && player.x < hazardEnd) {
+            hazard.nearMiss = true;
+            addPoints(50, 'NEAR MISS', player.x, player.y - 30, '#ff9c92');
+          }
         } else if (hitCircleRect(player.x, player.y, r, hazard.x, building.top - hazard.h, hazard.w, hazard.h)) {
           die(); return;
         }
@@ -443,7 +713,8 @@
         player.y = building.top - r;
         player.vy = 0;
         player.grounded = true;
-        player.gliding = false;
+        endGlide();
+        comboChain = 0;
       } else { die(); return; }
     }
     if (player.y - r > H + 80) die();
@@ -506,16 +777,12 @@
     player.trail.push({ x: player.x, y: player.y });
     if (player.trail.length > TUNE.trailLength) player.trail.shift();
     constrainRope();
-    if (!Number.isFinite(player.x) || !Number.isFinite(player.y) || !Number.isFinite(player.vx) || !Number.isFinite(player.vy)) { reset(); return; }
-    score = Math.max(score, Math.max(0, player.x - 116) / 10);
-    scoreNode.textContent = formatScore(score);
-    const currentMilestone = Math.floor(score / 500);
-    if (currentMilestone > lastMilestone) {
-      lastMilestone = currentMilestone;
-      spawnConfetti(player.x, player.y - 20, 80);
-    }
+    if (!Number.isFinite(player.x) || !Number.isFinite(player.y) || !Number.isFinite(player.vx) || !Number.isFinite(player.vy)) { startLevel(); return; }
+    levelDistance = Math.max(levelDistance, Math.max(0, player.x - START_X) / 10);
     updateGlideHud();
     collide();
+    if (state === 'running') updateHud();
+    if (state === 'running' && player.x >= gateX) { clearLevel(); return; }
     for (let i = attachEffects.length - 1; i >= 0; i--) {
       const e = attachEffects[i];
       e.life -= dt;
@@ -528,8 +795,9 @@
   }
 
   function drawSky() {
+    const palette = district();
     const sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, '#091022'); sky.addColorStop(0.62, '#17243c'); sky.addColorStop(1, '#243249');
+    sky.addColorStop(0, palette.sky[0]); sky.addColorStop(0.62, palette.sky[1]); sky.addColorStop(1, palette.sky[2]);
     ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
     const moonX = W * 0.78 - camera.x * 0.015;
     const moonY = H * 0.20;
@@ -541,8 +809,8 @@
       ctx.fillStyle = i % 4 === 0 ? '#d8e6fa7a' : '#b7cbed43';
       ctx.fillRect(x, y, i % 5 === 0 ? 2 : 1, i % 5 === 0 ? 2 : 1);
     }
-    drawSkyline(0.14, H * 0.64, '#1c2b40', 114, 0.13);
-    drawSkyline(0.31, H * 0.77, '#1a293b', 87, 0.19);
+    drawSkyline(0.14, H * 0.64, palette.far, 114, 0.13);
+    drawSkyline(0.31, H * 0.77, palette.near, 87, 0.19);
   }
 
   function drawSkyline(parallax, baseline, color, period, heightScale) {
@@ -556,17 +824,18 @@
   }
 
   function drawBuildings() {
+    const palette = district();
     for (const building of buildings) {
       const x = building.x - camera.x;
       if (x > W + 80 || x + building.w < -80) continue;
       const top = building.top;
-      ctx.fillStyle = '#101b2e'; ctx.fillRect(x, top, building.w, H - top + 10);
-      ctx.fillStyle = '#30425b'; ctx.fillRect(x - 3, top - 7, building.w + 6, 9);
-      ctx.fillStyle = '#1d3046'; ctx.fillRect(x, top + 2, building.w, 4);
+      ctx.fillStyle = palette.body; ctx.fillRect(x, top, building.w, H - top + 10);
+      ctx.fillStyle = palette.ledge; ctx.fillRect(x - 3, top - 7, building.w + 6, 9);
+      ctx.fillStyle = palette.trim; ctx.fillRect(x, top + 2, building.w, 4);
       // Stable window pattern, independent of frame or camera position.
       for (let col = 0; col < Math.floor((building.w - 20) / 30); col++) for (let row = 0; row < Math.ceil((H - top) / 36); row++) {
         const lit = ((col * 17 + row * 31 + building.index * 13) % 7) < 2;
-        ctx.fillStyle = lit ? '#e5bc7980' : '#51627d35';
+        ctx.fillStyle = lit ? palette.lit : palette.unlit;
         ctx.fillRect(x + 16 + col * 30, top + 22 + row * 36, 9, 13);
       }
       for (const anchor of building.anchors) {
@@ -604,7 +873,45 @@
           ctx.fillStyle = '#ff666e54'; ctx.fillRect(hx - 5, top - 3, hazard.w + 10, 4);
         }
       }
+      if (building.finish) drawFinishGate(building);
     }
+  }
+
+  function drawFinishGate(building) {
+    const gx = gateX - camera.x, top = building.top - 7;
+    const poleTop = top - 190;
+    const beam = ctx.createLinearGradient(gx - 26, 0, gx + 26, 0);
+    beam.addColorStop(0, '#ffd16600'); beam.addColorStop(0.5, '#ffd16638'); beam.addColorStop(1, '#ffd16600');
+    ctx.fillStyle = beam; ctx.fillRect(gx - 26, 0, 52, top);
+    ctx.strokeStyle = '#e8eef8'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(gx, top); ctx.lineTo(gx, poleTop); ctx.stroke();
+    // Waving checkered flag.
+    const cell = 9, cols = 8, rows = 4;
+    for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) {
+      ctx.fillStyle = (c + r) % 2 ? '#101420' : '#f6f8fc';
+      ctx.fillRect(gx + 2 + c * cell, poleTop + r * cell + Math.sin(elapsed * 5 + c * 0.7) * 3, cell, cell);
+    }
+    ctx.fillStyle = '#ffd166';
+    ctx.font = '900 13px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('FINISH', gx, poleTop - 12);
+    ctx.textAlign = 'left';
+  }
+
+  function drawPopups(dt) {
+    ctx.font = '900 13px Inter, system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    for (let i = popups.length - 1; i >= 0; i--) {
+      const p = popups[i];
+      p.life -= dt;
+      if (p.life <= 0) { popups.splice(i, 1); continue; }
+      p.y -= 38 * dt;
+      ctx.globalAlpha = clamp(p.life / p.maxLife * 1.6, 0, 1);
+      ctx.fillStyle = '#050a16'; ctx.fillText(p.text, p.x - camera.x + 1, p.y + 1);
+      ctx.fillStyle = p.color; ctx.fillText(p.text, p.x - camera.x, p.y);
+    }
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
   }
 
   function drawAnchorCue() {
@@ -651,16 +958,15 @@
     targetCtx.fillStyle = accent; targetCtx.beginPath(); targetCtx.arc(endX, endY, width * 0.37, 0, TAU); targetCtx.fill();
   }
 
-  function drawDeathDancer() {
-    if (!deathDancerCtx || !deathDancerCanvas) return;
-    const c = deathDancerCtx;
+  function drawDancer(c, target) {
+    if (!c || !target) return;
     const t = player.danceTimer || 0;
     const beat = Math.sin(t * 8);
     const beat2 = Math.sin(t * 8 + Math.PI / 2);
     c.setTransform(1, 0, 0, 1, 0, 0);
-    c.clearRect(0, 0, deathDancerCanvas.width, deathDancerCanvas.height);
+    c.clearRect(0, 0, target.width, target.height);
     c.save();
-    c.translate(deathDancerCanvas.width * 0.5, 87 + beat * 2);
+    c.translate(target.width * 0.5, 87 + beat * 2);
     c.scale(2.08, 2.08);
     c.rotate(beat * 0.1);
     c.lineCap = 'round';
@@ -706,7 +1012,7 @@
       rEx: 15, rEy: -2, rHx: 21, rHy: 3,
     };
 
-    if (player.dancing) {
+    if (player.dancing || state === 'levelclear') {
       const t = player.danceTimer || 0;
       const beat = Math.sin(t * 8);
       const beat2 = Math.sin(t * 8 + Math.PI / 2);
@@ -916,10 +1222,23 @@
         player.x = camera.x + W * 0.5;
         player.y = H * 0.92;
         player.danceTimer = (player.danceTimer || 0) + dt;
-        drawDeathDancer();
+        drawDancer(deathDancerCtx, deathDancerCanvas);
       }
     }
-    if (state !== 'paused') drawParticles(dt);
+    if (state === 'levelclear') {
+      levelClearTimer += dt;
+      player.danceTimer = (player.danceTimer || 0) + dt;
+      if (levelClearTimer >= 0.6) {
+        clearNode.hidden = false;
+        drawDancer(clearDancerCtx, clearDancerCanvas);
+        const left = Math.ceil(TUNE.levelClearAutoSeconds - levelClearTimer);
+        const autoText = levelResult.final ? '' : `Next level in ${left}`;
+        if ($('clear-auto').textContent !== autoText) $('clear-auto').textContent = autoText;
+      }
+      // The final level waits for the player; every other level moves on by itself.
+      if (!levelResult.final && levelClearTimer >= TUNE.levelClearAutoSeconds) advanceLevel();
+    }
+    if (state !== 'paused') { drawParticles(dt); drawPopups(dt); }
     if (flash > 0 && state !== 'paused') {
       flash = Math.max(0, flash - dt);
       ctx.fillStyle = state === 'dead' ? `rgba(255,80,95,${flash * 0.55})` : `rgba(135,227,255,${flash * 0.16})`;
@@ -945,12 +1264,17 @@
   window.addEventListener('keydown', event => {
     if (state === 'dead') {
       if (event.code === 'Space' || event.code === 'Enter') event.preventDefault();
-      if (event.code === 'Enter' && !event.repeat) reset();
+      if (event.code === 'Enter' && !event.repeat) continueAfterDeath();
+      return;
+    }
+    if (state === 'levelclear') {
+      if (event.code === 'Space' || event.code === 'Enter') event.preventDefault();
+      if ((event.code === 'Enter' || event.code === 'Space') && !event.repeat) finishLevelClear();
       return;
     }
     if (state === 'countdown' && !event.repeat && event.code !== 'Escape' && event.code !== 'KeyR') startRun();
     if (event.code === 'Space') { if (!event.repeat) press(event); else event.preventDefault(); }
-    if (event.code === 'KeyR') { event.preventDefault(); if (!event.repeat) reset(); }
+    if (event.code === 'KeyR') { event.preventDefault(); if (!event.repeat) restartLevel(); }
     if (event.code === 'Escape') { event.preventDefault(); if (!event.repeat) togglePause(); }
     if (event.code === 'KeyV') { event.preventDefault(); if (!event.repeat) jump(); }
     if (event.code === 'ArrowUp' || event.code === 'KeyW') { event.preventDefault(); if (state === 'running') shortenInputs.add(event.code); }
@@ -968,7 +1292,7 @@
   window.addEventListener('pointerdown', press);
   window.addEventListener('pointerup', unpress);
   window.addEventListener('pointercancel', unpress);
-  for (const button of [webButton, jumpButton, shortenButton, lengthenButton, pauseButton, resumeButton, restartButton, countdownPauseButton]) {
+  for (const button of [webButton, jumpButton, shortenButton, lengthenButton, pauseButton, resumeButton, restartButton, countdownPauseButton, nextButton, ...startOverButtons]) {
     button.addEventListener('pointerdown', event => event.stopPropagation());
   }
   webButton.addEventListener('pointerdown', event => {
@@ -988,8 +1312,10 @@
   webButton.addEventListener('pointercancel', releaseWebButton);
   webButton.addEventListener('lostpointercapture', releaseWebButton);
   restartButton.addEventListener('click', event => {
-    if (state === 'dead' && event.detail > 0) reset();
+    if (state === 'dead' && event.detail > 0) continueAfterDeath();
   });
+  nextButton.addEventListener('click', finishLevelClear);
+  for (const button of startOverButtons) button.addEventListener('click', startOver);
   jumpButton.addEventListener('click', () => { startRun(); jump(); });
   pauseButton.addEventListener('click', togglePause);
   resumeButton.addEventListener('click', togglePause);
@@ -1011,17 +1337,10 @@
     button.addEventListener('lostpointercapture', stopAdjusting);
   }
   window.addEventListener('blur', () => {
-    pressedInputs.clear();
-    webButtonInputs.clear();
-    webButton.classList.remove('active');
-    shortenInputs.clear();
-    lengthenInputs.clear();
-    leftInputs.clear();
-    rightInputs.clear();
-    shortenButton.classList.remove('active');
-    lengthenButton.classList.remove('active');
+    clearHeldInputs();
     release(false);
   });
+  levelBanner.addEventListener('animationend', () => { levelBanner.hidden = true; });
   window.addEventListener('resize', resize);
   resize();
   requestAnimationFrame(frame);

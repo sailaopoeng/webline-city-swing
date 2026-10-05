@@ -55,7 +55,7 @@ Use the AWS account that owns the `sailaopoeng.com` hosted zone. Console labels 
 
 **8. Add a spending alert.** *Billing and Cost Management* → *Budgets* → *Create budget* → *Use a template* → *Monthly cost budget*, amount `3`, your email → *Create budget*.
 
-**9. Retire Sites.** Once the domain serves from CloudFront, the ChatGPT Sites project, `.openai/hosting.json`, and `dist/` can be removed.
+**9. Retire Sites.** Once the domain serves from CloudFront, the ChatGPT Sites project can be deleted. Its `.openai/hosting.json` and `dist/` copy have already been removed from this repository.
 
 ## One-time setup (AWS CLI alternative)
 
@@ -103,7 +103,7 @@ Requires the AWS CLI logged in to the account that owns the `sailaopoeng.com` ho
 
    Expect a short gap (roughly the old record's TTL) while DNS changes. If CloudFront reports `CNAMEAlreadyExists` in step 1, the domain is still attached to the ChatGPT Sites project; remove the custom domain there first.
 
-5. Once the domain serves from CloudFront, the ChatGPT Sites project, `.openai/hosting.json`, and `dist/` can be retired.
+5. Once the domain serves from CloudFront, the ChatGPT Sites project can be deleted (its `.openai/hosting.json` and `dist/` copy are already gone from this repository).
 
 ## Everyday deploys
 
