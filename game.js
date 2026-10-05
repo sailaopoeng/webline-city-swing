@@ -720,6 +720,7 @@
     player.danceTimer = 0;
     clearHeldInputs();
     if (glideHud) glideHud.hidden = true;
+    if (powerHud) powerHud.hidden = true;
     release(false);
     burst(player.x, player.y, '#ff626b', 24, 210);
     flash = 0.28;
@@ -771,6 +772,7 @@
     scoreNode.textContent = formatPoints(points);
     progressFillNode.style.transform = 'scaleX(1)';
     if (glideHud) glideHud.hidden = true;
+    if (powerHud) powerHud.hidden = true;
     if (comboHud) comboHud.hidden = true;
     controlsNode.classList.add('hidden-controls');
     flash = 0.3;
@@ -847,6 +849,7 @@
         comboChain = 0;
       } else if (player.invuln > 0 || useShield()) {
         // The shield vaults the hero onto the roof instead of ending the run.
+        release(false);
         player.x = Math.max(player.x, building.x + r);
         player.y = building.top - r - 2;
         player.vy = Math.min(player.vy, -TUNE.jumpSpeed * 0.75);

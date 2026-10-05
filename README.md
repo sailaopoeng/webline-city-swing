@@ -16,11 +16,15 @@ Webline is a fast, momentum-driven rooftop swinging game built with plain HTML, 
 ## Features
 
 - Momentum-based web swinging with taut rope constraints
+- 100 levels across ten city districts, each about 1% harder, then an endless mode
+- Finish gates, level-clear celebration with stars, and five attempts per level
+- Points from distance × level, web combos, near misses, glides, and tokens
+- Power-ups: Rocket Boots, Glide Feather, Wingsuit, Shield, and Web Magnet
 - Procedurally generated rooftops, gaps, mast nodes, and spike clusters
-- Jumping, rope length control, swing pumping, and glide unlocks
+- Jumping, rope length control, swing pumping, and stored glide charges with auto-glide
 - Responsive keyboard, mouse, touch, and on-screen mobile controls
 - Camera zoom, motion trails, attach effects, milestone confetti, and a dancing death screen
-- Distance score and optional best score saved in `localStorage`
+- Level progress, best points, and best level saved in `localStorage`
 - No build step, dependencies, backend, or game engine
 
 ## Controls
@@ -28,14 +32,30 @@ Webline is a fast, momentum-driven rooftop swinging game built with plain HTML, 
 | Action | Keyboard | Mouse / touch |
 | --- | --- | --- |
 | Attach or hold the web | Hold `Space` | Hold the game surface or **WEB** |
-| Jump | `V` | **JUMP** |
+| Jump (on a roof) / glide (in the air) | `V` | **JUMP** / **GLIDE** |
 | Shorten the web | `↑` / `W` | **SHORTER** |
 | Let out the web | `↓` / `S` | **LONGER** |
 | Pump the swing | `←` / `A`, `→` / `D` | — |
 | Pause or resume | `Esc` | **PAUSE** |
-| Reset during a run | `R` | — |
+| Restart the level (uses an attempt once started) | `R` | — |
+| Continue after a level clear | `Enter` / `Space` | **Level N →** |
 
-Release the web to preserve your swing momentum. After ten successful airborne rope releases, glide becomes available.
+Release the web to preserve your swing momentum. Every ten airborne rope releases earns a glide charge (up to three). Use it with `V` in the air, or let it open by itself when you fall into a gap.
+
+## Levels and points
+
+Reach the finish gate to clear a level. Level 1 is 1000 m and each level adds 15 m. Gaps get wider, spikes more common, and roofs narrower by about 1% per level. You get five attempts per level; running out sends you back to level 1. Progress is saved, so a reload continues where you left off (add `?level=N` to the URL to jump to a level for testing). Clear level 100 to conquer the city and unlock endless mode.
+
+Points = distance × level multiplier + bonuses (web combos, near misses over spikes, glides, tokens), then a clear bonus and a time bonus for beating par.
+
+| Pickup | Effect |
+| --- | --- |
+| Rocket Boots | Fly forward with thrust and lift for 2.5 seconds |
+| Glide Feather | One extra glide charge |
+| Wingsuit | Longer, flatter glides for the rest of the level |
+| Shield | Survive one spike or wall hit |
+| Web Magnet | Longer web reach and token pull for 8 seconds |
+| Token | Points |
 
 ## Run locally
 
@@ -58,6 +78,11 @@ Then open [http://localhost:8000](http://localhost:8000).
 | `docs/screenshot.png` | End screen screenshot used in the README |
 | `infra/aws/` | AWS S3 + CloudFront hosting template and setup guide |
 | `.github/workflows/deploy-aws.yml` | Deploys to AWS on push to `main` |
+
+## Roadmap
+
+- Audio: sound effects and district music with a mute toggle
+- Menus: title screen, level select for cleared levels, and settings
 
 The main tuning values live near the top of `game.js`. See `AGENTS.md` for the physics model, control decisions, and checks used when changing the game.
 
