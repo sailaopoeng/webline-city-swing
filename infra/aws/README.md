@@ -30,6 +30,7 @@ Use the AWS account that owns the `sailaopoeng.com` hosted zone. Console labels 
   - `HostedZoneId`: pick `sailaopoeng.com` from the dropdown
   - `CreateDnsRecords`: **false**
   - `GitHubRepository` / `GitHubBranch`: keep `sailaopoeng/webline-city-swing` / `main`
+  - `GitHubOwnerId` / `GitHubRepositoryId`: keep `1961912` / `1377197541`. GitHub includes these IDs in its deploy identity (`repo:sailaopoeng@1961912/webline-city-swing@1377197541:ref:refs/heads/main`); a mismatch fails the deploy with "Not authorized to perform sts:AssumeRoleWithWebIdentity".
   - `ExistingGitHubOidcProviderArn`: the ARN from step 1, or blank if there was none
 - *Next* → leave the options page as is → *Next* → tick **"I acknowledge that AWS CloudFormation might create IAM resources"** → *Submit*.
 - Wait for **CREATE_COMPLETE** (often 5–15 minutes; the certificate and CloudFront are the slow parts). If it fails, the *Events* tab shows the first red reason. Delete the failed stack before retrying, and delete any leftover empty `webline-city-swing-sitebucket-…` bucket in S3.
