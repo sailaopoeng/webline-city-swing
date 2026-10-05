@@ -95,7 +95,8 @@ Resources:
         DefaultRootObject: index.html
         HttpVersion: http2and3
         IPV6Enabled: true
-        PriceClass: PriceClass_100
+        # Includes Asia edges (Singapore, Hong Kong, Japan, India); excludes the costlier South America and Oceania.
+        PriceClass: PriceClass_200
         Origins:
           - Id: SiteBucketOrigin
             DomainName: !GetAtt SiteBucket.RegionalDomainName
