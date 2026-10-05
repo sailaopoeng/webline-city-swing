@@ -110,11 +110,21 @@ canvas {
 .hint.faded {
   opacity:.85
 }
-.glide-hud {
+.status-hud {
   position:absolute;
   top:clamp(20px,4vh,34px);
   left:50%;
   transform:translateX(-50%);
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:6px;
+  width:max-content;
+  max-width:calc(100% - 24px);
+  pointer-events:none;
+  z-index:1
+}
+.glide-hud {
   padding:6px 14px;
   border:1px solid #8beaf688;
   border-radius:100px;
@@ -134,6 +144,147 @@ canvas {
   background:#ff5b64dd;
   border-color:#ffb3b7;
   color:#fff
+}
+.power-hud {
+  background:#5b2a12dd;
+  border-color:#ff9f4388;
+  color:#ffd3a8
+}
+.combo-hud {
+  background:#5a3d0cdd;
+  border-color:#ffd16688;
+  color:#ffe2a0
+}
+.scores .sub {
+  font-size:9px;
+  letter-spacing:.14em;
+  color:#7f8ea8
+}
+.level-progress {
+  position:absolute;
+  top:0;
+  left:0;
+  right:0;
+  height:4px;
+  background:#ffffff14;
+  pointer-events:none;
+  z-index:1
+}
+.level-progress[hidden] {
+  display:none
+}
+.level-progress-fill {
+  height:100%;
+  background:linear-gradient(90deg,#55d6ef,#ffd166);
+  transform-origin:left;
+  transform:scaleX(0);
+  box-shadow:0 0 10px #ffd16688
+}
+.level-banner {
+  position:absolute;
+  top:24%;
+  left:50%;
+  transform:translateX(-50%);
+  padding:10px 22px;
+  border:1px solid #ffd16688;
+  border-radius:100px;
+  background:#101a2ccc;
+  color:#ffe2a0;
+  font-size:clamp(14px,3vw,20px);
+  font-weight:900;
+  letter-spacing:.2em;
+  white-space:nowrap;
+  pointer-events:none;
+  opacity:0;
+  z-index:1
+}
+.level-banner[hidden] {
+  display:none
+}
+.level-banner.show {
+  animation:banner 2.4s ease forwards
+}
+@keyframes banner {
+  0% { opacity:0; transform:translate(-50%,10px) }
+  15%,70% { opacity:1; transform:translate(-50%,0) }
+  100% { opacity:0; transform:translate(-50%,-8px) }
+}
+.countdown-level {
+  font-size:clamp(28px,6vw,40px);
+  font-weight:900;
+  letter-spacing:.08em;
+  color:#ffe2a0;
+  text-shadow:0 0 24px #ffd16655
+}
+.start-over-button {
+  display:block;
+  margin:10px auto 0;
+  padding:6px 10px;
+  border:0;
+  background:none;
+  color:#8b9ab5;
+  font-family:inherit;
+  font-size:11px;
+  font-weight:700;
+  text-decoration:underline;
+  cursor:pointer
+}
+.start-over-button[hidden] {
+  display:none
+}
+.start-over-button:hover,.start-over-button:focus-visible {
+  color:#f1f5fb
+}
+.final-detail {
+  margin-top:6px;
+  letter-spacing:.08em !important;
+  font-weight:700 !important
+}
+.clear-card .eyebrow {
+  color:#ffd166
+}
+.stars {
+  margin-top:6px;
+  color:#ffd166;
+  font-size:30px;
+  letter-spacing:.12em;
+  text-shadow:0 0 18px #ffd16677
+}
+.clear-stats {
+  display:grid;
+  gap:5px;
+  margin:0 0 12px;
+  font-size:12px
+}
+.clear-stats div {
+  display:flex;
+  justify-content:space-between;
+  gap:16px
+}
+.clear-stats dt {
+  color:#9cabc3;
+  font-weight:700
+}
+.clear-stats dd {
+  margin:0;
+  font-weight:800;
+  font-variant-numeric:tabular-nums
+}
+.clear-stats .total {
+  margin-top:4px;
+  padding-top:7px;
+  border-top:1px solid #879bc333;
+  font-size:15px
+}
+.clear-stats .total dd {
+  color:#ffe2a0
+}
+.clear-card .state-note {
+  display:block;
+  margin-bottom:12px
+}
+.clear-card .clear-auto {
+  margin:10px 0 0
 }
 .mobile-hint,.mobile-note {
   display:none
@@ -346,7 +497,10 @@ h1 {
     gap:16px
   }
   .scores strong {
-    font-size:19px
+    font-size:17px
+  }
+  .scores .sub {
+    font-size:7px
   }
   .label {
     font-size:8px
@@ -359,8 +513,10 @@ h1 {
     letter-spacing:.04em;
     text-align:center
   }
+  .status-hud {
+    top:64px
+  }
   .glide-hud {
-    top:clamp(14px,3vh,22px);
     padding:5px 10px;
     font-size:9px;
     letter-spacing:.12em
@@ -451,6 +607,13 @@ h1 {
   }
   .final-distance strong {
     font-size:clamp(44px,11vw,64px)
+  }
+  .clear-stats {
+    font-size:11px;
+    gap:3px
+  }
+  .stars {
+    font-size:24px
   }
   h1 {
     margin:6px 0 10px;
