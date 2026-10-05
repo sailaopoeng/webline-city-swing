@@ -28,6 +28,16 @@ Parameters:
     Type: String
     Default: main
     Description: Branch allowed to deploy.
+  GitHubOwnerId:
+    Type: String
+    Default: '1961912'
+    Description: >
+      Numeric GitHub account ID of the repository owner. GitHub puts it in the OIDC
+      subject (repo:owner@ID/name@ID:...). Leave empty for the older name-only subject.
+  GitHubRepositoryId:
+    Type: String
+    Default: '1377197541'
+    Description: Numeric GitHub repository ID used with GitHubOwnerId.
   ExistingGitHubOidcProviderArn:
     Type: String
     Default: ''
@@ -38,6 +48,10 @@ Parameters:
 Conditions:
   ShouldCreateDnsRecords: !Equals [!Ref CreateDnsRecords, 'true']
   ShouldCreateOidcProvider: !Equals [!Ref ExistingGitHubOidcProviderArn, '']
+  UseIdPinnedSubject: !Not
+    - !Or
+      - !Equals [!Ref GitHubOwnerId, '']
+      - !Equals [!Ref GitHubRepositoryId, '']
 
 Resources:
   SiteBucket:
@@ -95,7 +109,8 @@ Resources:
         DefaultRootObject: index.html
         HttpVersion: http2and3
         IPV6Enabled: true
-        PriceClass: PriceClass_100
+        # Includes Asia edges (Singapore, Hong Kong, Japan, India); excludes the costlier South America and Oceania.
+        PriceClass: PriceClass_200
         Origins:
           - Id: SiteBucketOrigin
             DomainName: !GetAtt SiteBucket.RegionalDomainName
@@ -185,7 +200,13 @@ Resources:
             Condition:
               StringEquals:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
-                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubRepository}:ref:refs/heads/${GitHubBranch}'
+                token.actions.githubusercontent.com:sub: !If
+                  - UseIdPinnedSubject
+                  - !Sub
+                    - 'repo:${Owner}@${GitHubOwnerId}/${Name}@${GitHubRepositoryId}:ref:refs/heads/${GitHubBranch}'
+                    - Owner: !Select [0, !Split ['/', !Ref GitHubRepository]]
+                      Name: !Select [1, !Split ['/', !Ref GitHubRepository]]
+                  - !Sub 'repo:${GitHubRepository}:ref:refs/heads/${GitHubBranch}'
       Policies:
         - PolicyName: PublishSite
           PolicyDocument:
