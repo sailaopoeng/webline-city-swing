@@ -57,9 +57,13 @@ Then open [http://localhost:8000](http://localhost:8000).
 | `docs/screenshot1.png` | Gameplay screenshot used in the README |
 | `docs/screenshot.png` | End screen screenshot used in the README |
 | `dist/` | Static deployment copy for hosting |
+| `infra/aws/` | AWS S3 + CloudFront hosting template and setup guide |
+| `.github/workflows/deploy-aws.yml` | Deploys to AWS on push to `main` |
 
 The main tuning values live near the top of `game.js`. See `AGENTS.md` for the physics model, control decisions, and checks used when changing the game.
 
 ## Hosted version
 
 Play the project online at [webline-city-swing.sailaopoeng.com](https://webline-city-swing.sailaopoeng.com/).
+
+To host it on AWS (S3 + CloudFront + Route 53) with automatic deploys from GitHub, see [`infra/aws/README.md`](infra/aws/README.md).

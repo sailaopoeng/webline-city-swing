@@ -1,0 +1,59 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - index.html
+      - style.css
+      - game.js
+      - .github/workflows/deploy-aws.yml
+  workflow_dispatch:
+
+permissions:
+  id-token: write # GitHub OIDC token for the AWS deploy role
+  contents: read
+
+concurrency:
+  group: deploy-aws
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    # Skips cleanly until the repository variables from infra/aws/README.md are set.
+    if: vars.AWS_DEPLOY_ROLE_ARN != ''
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: us-east-1
+      BUCKET: ${{ vars.AWS_S3_BUCKET }}
+      DISTRIBUTION_ID: ${{ vars.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check game script
+        run: node --check game.js
+
+      - name: Stage site files
+        run: |
+          mkdir site
+          cp index.html style.css game.js site/
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload to S3
+        run: |
+          aws s3 cp site/ "s3://$BUCKET/" --recursive --exclude index.html \
+            --cache-control "public, max-age=300"
+          aws s3 cp site/index.html "s3://$BUCKET/index.html" \
+            --cache-control "no-cache" --content-type "text/html; charset=utf-8"
+          # Remove anything in the bucket that is no longer part of the site.
+          aws s3 sync site/ "s3://$BUCKET/" --delete
+
+      - name: Invalidate CloudFront
+        run: |
+          id=$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" \
+            --paths '/*' --query Invalidation.Id --output text)
+          aws cloudfront wait invalidation-completed --distribution-id "$DISTRIBUTION_ID" --id "$id"
