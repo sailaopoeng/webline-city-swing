@@ -10,7 +10,53 @@ browser ──► Route 53 alias ──► CloudFront (ACM TLS) ◄────�
 
 `webline-site.yaml` creates everything: bucket, CloudFront distribution, ACM certificate (DNS-validated in your hosted zone), optional Route 53 A/AAAA alias records, and an IAM role that only `main` of this repository can assume. No AWS keys are stored in GitHub. Expected cost for a small game is well under US$1/month (Route 53 zone fee aside).
 
-## One-time setup
+## One-time setup (AWS web console)
+
+Use the AWS account that owns the `sailaopoeng.com` hosted zone. Console labels shift occasionally; the steps below name what to look for.
+
+**0. Merge to `main` first.** The workflow and the deploy role only work from `main`, so merge the branch with these files before continuing. The first run after merging is skipped because the variables aren't set yet.
+
+**1. Note what exists (nothing is changed yet).**
+- Route 53 → *Hosted zones* → `sailaopoeng.com`. Find the `webline-city-swing.sailaopoeng.com` record and write down its type and value (likely a CNAME to `*.chatgpt.site`); you need this to roll back.
+- IAM → *Identity providers*. If `token.actions.githubusercontent.com` is listed, open it and copy its ARN; otherwise there's nothing to copy.
+
+**2. Download the template.** On GitHub open `infra/aws/webline-site.yaml` → *Download raw file*.
+
+**3. Create the stack.**
+- In the top-right region picker choose **US East (N. Virginia) us-east-1**. CloudFront's certificate must live there.
+- CloudFormation → *Create stack* → *With new resources (standard)* → *Choose an existing template* → *Upload a template file* → choose `webline-site.yaml` → *Next*.
+- Stack name: `webline-city-swing`. Parameters:
+  - `DomainName`: keep `webline-city-swing.sailaopoeng.com`
+  - `HostedZoneId`: pick `sailaopoeng.com` from the dropdown
+  - `CreateDnsRecords`: **false**
+  - `GitHubRepository` / `GitHubBranch`: keep `sailaopoeng/webline-city-swing` / `main`
+  - `ExistingGitHubOidcProviderArn`: the ARN from step 1, or blank if there was none
+- *Next* → leave the options page as is → *Next* → tick **"I acknowledge that AWS CloudFormation might create IAM resources"** → *Submit*.
+- Wait for **CREATE_COMPLETE** (often 5–15 minutes; the certificate and CloudFront are the slow parts). If it fails, the *Events* tab shows the first red reason. Delete the failed stack before retrying, and delete any leftover empty `webline-city-swing-sitebucket-…` bucket in S3.
+
+**4. Copy the outputs.** Open the stack → *Outputs* tab. Keep `DeployRoleArn`, `BucketName`, `DistributionId`, and `DistributionDomainName` handy.
+
+**5. Add GitHub variables.** Repository → *Settings* → *Secrets and variables* → *Actions* → *Variables* tab → *New repository variable*, three times:
+
+| Name | Value |
+| --- | --- |
+| `AWS_DEPLOY_ROLE_ARN` | `DeployRoleArn` |
+| `AWS_S3_BUCKET` | `BucketName` |
+| `AWS_CLOUDFRONT_DISTRIBUTION_ID` | `DistributionId` |
+
+**6. First deploy and test.** Repository → *Actions* → *Deploy to AWS* → *Run workflow* → branch `main` → *Run workflow*. When it's green, open `https://<DistributionDomainName>/` and play a run. The ChatGPT-hosted domain is still live at this point.
+
+**7. Switch the domain.**
+- If the custom domain is configured inside ChatGPT Sites, remove it there first.
+- Route 53 → `sailaopoeng.com` → select only the `webline-city-swing.sailaopoeng.com` record from step 1 → *Delete record*. Do **not** delete the `_…` CNAME the stack added; it keeps the certificate valid.
+- CloudFormation → `webline-city-swing` → *Update* → *Use existing template* → *Next* → set `CreateDnsRecords` to **true** → *Next* → *Next* → tick the IAM acknowledgement → *Submit*. Wait for **UPDATE_COMPLETE**.
+- After a few minutes, open `https://webline-city-swing.sailaopoeng.com/` in a private window. Rollback: update the stack back to `false` and recreate the record you wrote down in step 1.
+
+**8. Add a spending alert.** *Billing and Cost Management* → *Budgets* → *Create budget* → *Use a template* → *Monthly cost budget*, amount `3`, your email → *Create budget*.
+
+**9. Retire Sites.** Once the domain serves from CloudFront, the ChatGPT Sites project, `.openai/hosting.json`, and `dist/` can be removed.
+
+## One-time setup (AWS CLI alternative)
 
 Requires the AWS CLI logged in to the account that owns the `sailaopoeng.com` hosted zone.
 
