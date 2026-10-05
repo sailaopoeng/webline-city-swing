@@ -28,7 +28,7 @@ jobs:
       BUCKET: ${{ vars.AWS_S3_BUCKET }}
       DISTRIBUTION_ID: ${{ vars.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check game script
         run: node --check game.js
@@ -38,7 +38,7 @@ jobs:
           mkdir site
           cp index.html style.css game.js site/
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
