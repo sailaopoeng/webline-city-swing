@@ -44,7 +44,27 @@
     tripleSpikeChance: [0.25, 0.85],
     roofShrink: [0, 90],
     roofDrop: [0, 0.08], // fraction of screen height
+    // Pickups: power-ups float over gaps, token arcs follow swing lines under masts.
+    itemChance: [0.5, 0.28],
+    tokenChance: [0.55, 0.35],
+    pickupRadius: 17,
+    maxGlideCharges: 3,
+    autoGlideMargin: 140, // auto-glide opens when falling this close above the next roof top
+    boostSeconds: 2.5,
+    boostThrust: 900,
+    boostMaxSpeed: 1150,
+    boostLift: -70, // vertical speed held while boots fire
+    magnetSeconds: 8,
+    magnetRange: 1.4, // attachment range multiplier
+    wingsuitGlide: 0.6, // glide gravity and fall-speed factor with the wingsuit
   });
+  const ITEM_TYPES = [
+    { type: 'boots', weight: 0.24, color: '#ff9f43', label: 'ROCKET BOOTS' },
+    { type: 'feather', weight: 0.26, color: '#55d6ef', label: 'GLIDE +1' },
+    { type: 'shield', weight: 0.18, color: '#7ee0ff', label: 'SHIELD' },
+    { type: 'magnet', weight: 0.17, color: '#ff5b64', label: 'WEB MAGNET' },
+    { type: 'wingsuit', weight: 0.15, color: '#ffd166', label: 'WINGSUIT' },
+  ];
 
   // One sky and building palette per ten levels; the last entry is endless mode.
   const DISTRICTS = [
@@ -105,12 +125,13 @@
   const countdownPauseButton = $('countdown-pause-button');
   const glideHud = $('glide-hud');
   const comboHud = $('combo-hud');
+  const powerHud = $('power-hud');
   const TAU = Math.PI * 2;
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const rand = (min, max) => min + Math.random() * (max - min);
   const lerp = (a, b, t) => a + (b - a) * t;
 
-  let W = 0, H = 0, dpr = 1, player, rope, buildings, particles, popups, camera, nextBuildingX, swings;
+  let W = 0, H = 0, dpr = 1, player, rope, buildings, particles, popups, items, camera, nextBuildingX, swings;
   let state = 'countdown', resumeState = 'running', countdownRemaining = 0;
   let retryAt = 0, elapsed = 0, zoom = 1;
   // Points: banked from cleared levels, plus this attempt's distance and bonus points.
@@ -200,23 +221,28 @@
     hintNode.classList.remove('faded');
   }
 
+  function setText(node, text) {
+    if (node.textContent !== text) node.textContent = text;
+  }
+
   function updateGlideHud() {
     if (!glideHud) return;
-    if (player && player.gliding) {
-      glideHud.textContent = 'GLIDING';
-      glideHud.classList.add('gliding');
-      glideHud.hidden = false;
-    } else if (swings >= TUNE.glideSwingCount) {
-      glideHud.textContent = 'GLIDE READY';
-      glideHud.classList.remove('gliding');
-      glideHud.hidden = false;
-    } else if (swings > 0) {
-      glideHud.textContent = `SWINGS ${swings}/${TUNE.glideSwingCount}`;
-      glideHud.classList.remove('gliding');
-      glideHud.hidden = false;
-    } else {
-      glideHud.hidden = true;
-    }
+    const parts = [];
+    if (player.gliding) parts.push(player.wingsuit ? 'WINGSUIT GLIDE' : 'GLIDING');
+    else if (player.glideCharges > 0) parts.push(`GLIDE ×${player.glideCharges}`);
+    if (swings > 0 && !player.gliding && player.glideCharges < TUNE.maxGlideCharges) parts.push(`SWINGS ${swings}/${TUNE.glideSwingCount}`);
+    glideHud.hidden = parts.length === 0;
+    glideHud.classList.toggle('gliding', player.gliding);
+    setText(glideHud, parts.join(' · '));
+    setText(jumpButton.firstChild, canGlide() ? 'GLIDE ' : 'JUMP ');
+    if (!powerHud) return;
+    const powers = [];
+    if (player.boostTimer > 0) powers.push(`BOOTS ${player.boostTimer.toFixed(1)}`);
+    if (player.magnetTimer > 0) powers.push(`MAGNET ${Math.ceil(player.magnetTimer)}`);
+    if (player.shield) powers.push('SHIELD');
+    if (player.wingsuit && !player.gliding) powers.push('WINGSUIT');
+    powerHud.hidden = powers.length === 0;
+    setText(powerHud, powers.join(' · '));
   }
 
   function resize() {
@@ -274,6 +300,7 @@
     buildings = [];
     particles = [];
     popups = [];
+    items = [];
     attachEffects.length = 0;
     camera = { x: 0 };
     elapsed = 0;
@@ -295,11 +322,13 @@
     startingRoof.anchors[0] = { x: 276, y: mastY };
     startingRoof.anchors[1] = { x: startingRoof.x + startingRoof.w - 150, y: mastY };
     buildings.push(startingRoof);
-    player = { x: START_X, y: startingRoof.top - TUNE.playerRadius, px: START_X, py: startingRoof.top - TUNE.playerRadius, vx: TUNE.horizontalStartingSpeed, vy: 0, grounded: true, landingTimer: 0, tumbleTimer: 0, tumbleAngle: 0, pose: null, gliding: false, trail: [], speed: 0, dancing: false, danceTimer: 0 };
+    player = { x: START_X, y: startingRoof.top - TUNE.playerRadius, px: START_X, py: startingRoof.top - TUNE.playerRadius, vx: TUNE.horizontalStartingSpeed, vy: 0, grounded: true, landingTimer: 0, tumbleTimer: 0, tumbleAngle: 0, pose: null, gliding: false, trail: [], speed: 0, dancing: false, danceTimer: 0, glideCharges: 0, glideStartX: 0, boostTimer: 0, magnetTimer: 0, shield: false, wingsuit: false, invuln: 0 };
     nextBuildingX = startingRoof.x + startingRoof.w + rand(...TUNE.buildingSpacing);
     generateAhead();
     updateHud();
     if (glideHud) glideHud.hidden = true;
+    if (powerHud) powerHud.hidden = true;
+    setText(jumpButton.firstChild, 'JUMP ');
     deathNode.hidden = true;
     clearNode.hidden = true;
     levelBanner.hidden = true;
@@ -362,21 +391,110 @@
       }
       buildings.push(building);
       const gap = rand(TUNE.buildingSpacing[0], TUNE.buildingSpacing[1]) * levelScaled(TUNE.gapScale);
+      if (index > 1 && !building.finish) placeItems(building, gap);
       nextBuildingX += building.w + gap;
     }
+    while (items.length && items[0].x < camera.x - 300) items.shift();
     while (buildings.length > 4 && buildings[0].x + buildings[0].w < camera.x - 500) buildings.shift();
+  }
+
+  function placeItems(building, gap) {
+    if (Math.random() < levelScaled(TUNE.itemChance)) {
+      let roll = Math.random() * ITEM_TYPES.reduce((sum, item) => sum + item.weight, 0);
+      let kind = ITEM_TYPES.find(item => (roll -= item.weight) < 0) || ITEM_TYPES[0];
+      if (kind.type === 'wingsuit' && items.some(item => item.type === 'wingsuit')) kind = ITEM_TYPES[1];
+      items.push({ x: building.x + building.w + gap * 0.5, y: clamp(building.top - rand(110, 230), H * 0.25, H - 140), type: kind.type, bob: rand(0, TAU) });
+    }
+    const mast = building.anchors[0];
+    if (Math.random() < levelScaled(TUNE.tokenChance)) {
+      // Five tokens along the bottom of a typical swing around this mast.
+      const radius = rand(190, 250);
+      for (let k = 0; k < 5; k++) {
+        const angle = lerp(0.3, 0.75, k / 4) * Math.PI;
+        const y = mast.y + Math.sin(angle) * radius;
+        if (y < building.top - 40) items.push({ x: mast.x + Math.cos(angle) * radius, y, type: 'token', bob: k * 0.6 });
+      }
+    }
+    items.sort((a, b) => a.x - b.x);
+  }
+
+  function collectItems(dt) {
+    const reach = TUNE.playerRadius + TUNE.pickupRadius;
+    for (let i = items.length - 1; i >= 0; i--) {
+      const item = items[i];
+      const dx = player.x - item.x, dy = player.y - item.y;
+      const distance = Math.hypot(dx, dy);
+      if (item.type === 'token' && player.magnetTimer > 0 && distance < 170 && distance > 0) {
+        item.x += dx / distance * 520 * dt;
+        item.y += dy / distance * 520 * dt;
+      }
+      if (distance > reach) continue;
+      items.splice(i, 1);
+      if (item.type === 'token') {
+        addPoints(10, '', item.x, item.y - 12);
+        burst(item.x, item.y, '#ffd166', 6, 70);
+        continue;
+      }
+      const kind = ITEM_TYPES.find(entry => entry.type === item.type);
+      popups.push({ x: item.x, y: item.y - 22, text: kind.label, life: 1.3, maxLife: 1.3, color: kind.color });
+      burst(item.x, item.y, kind.color, 16, 150);
+      flash = Math.max(flash, 0.12);
+      vibrate(30);
+      if (item.type === 'boots') {
+        // Rocket boots fly the hero forward; webs reconnect once they burn out.
+        release(false);
+        endGlide();
+        player.boostTimer = TUNE.boostSeconds;
+      } else if (item.type === 'feather') {
+        player.glideCharges = Math.min(TUNE.maxGlideCharges, player.glideCharges + 1);
+      } else if (item.type === 'wingsuit') {
+        player.wingsuit = true;
+        player.glideCharges = Math.min(TUNE.maxGlideCharges, player.glideCharges + 1);
+      } else if (item.type === 'shield') {
+        player.shield = true;
+      } else if (item.type === 'magnet') {
+        player.magnetTimer = TUNE.magnetSeconds;
+      }
+    }
+  }
+
+  function canGlide() {
+    return state === 'running' && !player.grounded && !rope && !player.gliding && player.glideCharges > 0 && player.boostTimer <= 0;
+  }
+
+  function startGlide(label) {
+    if (!canGlide()) return false;
+    player.glideCharges--;
+    player.gliding = true;
+    player.glideStartX = player.x;
+    if (Math.abs(player.vx) < TUNE.glideMinSpeed) player.vx = Math.sign(player.vx || 1) * TUNE.glideMinSpeed;
+    burst(player.x, player.y, '#b8f8ff', 10, 90);
+    if (label) popups.push({ x: player.x, y: player.y - 34, text: label, life: 1, maxLife: 1, color: '#b8f8ff' });
+    return true;
+  }
+
+  // Falling into a gap with a glide charge opens the glide before the hero drops below the next roof.
+  function autoGlide() {
+    if (!canGlide() || player.vy < 150) return;
+    const r = TUNE.playerRadius;
+    if (buildings.some(b => player.x + r > b.x && player.x - r < b.x + b.w && b.top > player.y)) return;
+    const next = buildings.find(b => b.x > player.x);
+    if (!next || player.y + r < next.top - TUNE.autoGlideMargin) return;
+    if (pressedInputs.size && findAnchor()) return; // A web is about to catch the hero.
+    startGlide('AUTO GLIDE');
   }
 
   function findAnchor() {
     let choice = null;
     let bestCost = Infinity;
+    const range = player.magnetTimer > 0 ? TUNE.magnetRange : 1;
     for (const building of buildings) for (const anchor of building.anchors) {
       const screenX = anchor.x - camera.x;
       if (screenX < 16 || screenX > W - 16) continue;
       const dx = anchor.x - player.x;
       const dy = anchor.y - player.y;
       const length = Math.hypot(dx, dy);
-      if (dx < -65 || dx > TUNE.attachmentRange || dy > -60 || length < TUNE.minRopeLength || length > Math.min(TUNE.maxRopeLength, TUNE.attachmentRange)) continue;
+      if (dx < -65 || dx > TUNE.attachmentRange * range || dy > -60 || length < TUNE.minRopeLength || length > Math.min(TUNE.maxRopeLength, TUNE.attachmentRange) * range) continue;
       // Prefer a nearby node ahead; a slightly behind node remains usable late in a swing.
       const cost = length + Math.max(0, -dx) * 2.4 + Math.abs(dx - 145) * 0.08;
       if (cost < bestCost) { bestCost = cost; choice = { x: anchor.x, y: anchor.y, length }; }
@@ -415,10 +533,10 @@
   }
 
   function attach() {
-    if (state !== 'running' || rope) return;
+    if (state !== 'running' || rope || player.boostTimer > 0) return;
     const point = findAnchor();
     if (!point) return;
-    rope = { x: point.x, y: point.y, length: point.length * 0.985 };
+    rope = { x: point.x, y: point.y, length: point.length * 0.985, maxLength: Math.max(TUNE.maxRopeLength, point.length) };
     endGlide();
     if (!player.grounded) {
       // Chaining webs without touching a roof builds a combo.
@@ -436,14 +554,10 @@
     burst(player.x, player.y, '#d7f8ff', 5, 60);
     rope = null; // Velocity is deliberately unchanged.
     if (state !== 'running') return;
-    if (countAsSwing && !player.grounded) swings++;
-    if (swings >= TUNE.glideSwingCount && !player.grounded) {
-      player.gliding = true;
-      player.glideStartX = player.x;
+    if (countAsSwing && !player.grounded && player.glideCharges < TUNE.maxGlideCharges && ++swings >= TUNE.glideSwingCount) {
       swings = 0;
-      if (Math.abs(player.vx) < TUNE.glideMinSpeed) {
-        player.vx = Math.sign(player.vx || 1) * TUNE.glideMinSpeed;
-      }
+      player.glideCharges++;
+      popups.push({ x: player.x, y: player.y - 34, text: 'GLIDE +1', life: 1, maxLife: 1, color: '#b8f8ff' });
     }
   }
 
@@ -455,6 +569,7 @@
   }
 
   function jump() {
+    if (state === 'running' && !player.grounded) { startGlide(); return; }
     if (state !== 'running' || !player.grounded) return;
     release();
     player.vy = -TUNE.jumpSpeed;
@@ -680,6 +795,18 @@
     if (state === 'levelclear' && levelClearTimer >= 0.8) advanceLevel();
   }
 
+  function useShield() {
+    if (!player.shield) return false;
+    player.shield = false;
+    player.invuln = 0.6;
+    release(false);
+    burst(player.x, player.y, '#7ee0ff', 26, 220);
+    popups.push({ x: player.x, y: player.y - 34, text: 'SHIELD SAVE', life: 1.1, maxLife: 1.1, color: '#7ee0ff' });
+    flash = Math.max(flash, 0.2);
+    vibrate(60);
+    return true;
+  }
+
   function collide() {
     const r = TUNE.playerRadius;
     const wasGrounded = player.grounded;
@@ -693,7 +820,10 @@
             const a = { x: bx, y: building.top };
             const b = { x: bx + hazard.spikeBase, y: building.top };
             const c = { x: bx + hazard.spikeBase * 0.5, y: building.top - hazard.h };
-            if (hitCircleTriangle(player.x, player.y, r, a, b, c)) { die(); return; }
+            if (hitCircleTriangle(player.x, player.y, r, a, b, c) && player.invuln <= 0) {
+              if (!useShield()) { die(); return; }
+              player.vy = -TUNE.jumpSpeed * 0.75;
+            }
           }
           // Clearing the spike tips by a hair earns a one-time near-miss bonus.
           const clearance = building.top - hazard.h - (player.y + r);
@@ -715,6 +845,12 @@
         player.grounded = true;
         endGlide();
         comboChain = 0;
+      } else if (player.invuln > 0 || useShield()) {
+        // The shield vaults the hero onto the roof instead of ending the run.
+        player.x = Math.max(player.x, building.x + r);
+        player.y = building.top - r - 2;
+        player.vy = Math.min(player.vy, -TUNE.jumpSpeed * 0.75);
+        player.vx = Math.max(player.vx, TUNE.horizontalStartingSpeed);
       } else { die(); return; }
     }
     if (player.y - r > H + 80) die();
@@ -731,9 +867,12 @@
     if (state !== 'running') return;
     elapsed += dt;
     player.landingTimer = Math.max(0, player.landingTimer - dt);
+    player.boostTimer = Math.max(0, player.boostTimer - dt);
+    player.magnetTimer = Math.max(0, player.magnetTimer - dt);
+    player.invuln = Math.max(0, player.invuln - dt);
     if (rope) {
       const direction = Number(lengthenInputs.size > 0) - Number(shortenInputs.size > 0);
-      rope.length = clamp(rope.length + direction * TUNE.ropeAdjustSpeed * dt, TUNE.minRopeLength, TUNE.maxRopeLength);
+      rope.length = clamp(rope.length + direction * TUNE.ropeAdjustSpeed * dt, TUNE.minRopeLength, rope.maxLength);
     }
     if (pressedInputs.size && !rope && elapsed >= retryAt) {
       attach();
@@ -749,10 +888,16 @@
     if (player.vx < TUNE.horizontalStartingSpeed) player.vx = Math.min(TUNE.horizontalStartingSpeed, player.vx + acceleration * dt);
     else player.vx += (rope ? TUNE.swingAcceleration : (player.gliding ? TUNE.glideAirAcceleration : TUNE.airAcceleration * 0.25)) * dt;
 
-    if (player.gliding && !rope) {
-      player.vy = Math.min(TUNE.glideMaxFallSpeed, player.vy + TUNE.glideGravity * dt);
+    if (player.boostTimer > 0) {
+      // Boots add thrust and hold a gentle climb, levelling off near the top of the screen.
+      player.vx += TUNE.boostThrust * dt;
+      const targetVy = player.y < H * 0.2 ? 40 : TUNE.boostLift;
+      player.vy += (targetVy - player.vy) * Math.min(1, 5 * dt);
+    } else if (player.gliding && !rope) {
+      const suit = player.wingsuit ? TUNE.wingsuitGlide : 1;
+      player.vy = Math.min(TUNE.glideMaxFallSpeed * suit, player.vy + TUNE.glideGravity * suit * dt);
       if (player.vy > 0 && Math.abs(player.vx) > TUNE.glideMinSpeed) {
-        player.vy = Math.max(0, player.vy - TUNE.glideLift * dt);
+        player.vy = Math.max(0, player.vy - TUNE.glideLift / suit * dt);
       }
     } else {
       player.vy = Math.min(TUNE.maxFallSpeed, player.vy + TUNE.gravity * dt);
@@ -764,11 +909,13 @@
     }
 
     let speed = Math.hypot(player.vx, player.vy);
-    if (speed > TUNE.maxSpeed) {
-      const scale = TUNE.maxSpeed / speed;
+    // After boots burn out, the higher speed eases back down to the normal cap.
+    const speedCap = player.boostTimer > 0 ? TUNE.boostMaxSpeed : Math.max(TUNE.maxSpeed, Math.min(player.speed, TUNE.boostMaxSpeed) - 500 * dt);
+    if (speed > speedCap) {
+      const scale = speedCap / speed;
       player.vx *= scale;
       player.vy *= scale;
-      speed = TUNE.maxSpeed;
+      speed = speedCap;
     }
     player.speed = speed;
     player.x += player.vx * dt;
@@ -779,6 +926,8 @@
     constrainRope();
     if (!Number.isFinite(player.x) || !Number.isFinite(player.y) || !Number.isFinite(player.vx) || !Number.isFinite(player.vy)) { startLevel(); return; }
     levelDistance = Math.max(levelDistance, Math.max(0, player.x - START_X) / 10);
+    collectItems(dt);
+    autoGlide();
     updateGlideHud();
     collide();
     if (state === 'running') updateHud();
@@ -896,6 +1045,56 @@
     ctx.textAlign = 'center';
     ctx.fillText('FINISH', gx, poleTop - 12);
     ctx.textAlign = 'left';
+  }
+
+  function drawItemIcon(type, color) {
+    ctx.fillStyle = '#0b1322e6';
+    ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.fill();
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(0, 0, 15, 0, TAU); ctx.stroke();
+    ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    if (type === 'boots') {
+      ctx.moveTo(-5, -8); ctx.lineTo(1, -8); ctx.lineTo(1, 1); ctx.lineTo(8, 3); ctx.lineTo(8, 7); ctx.lineTo(-5, 7); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffd166';
+      ctx.beginPath(); ctx.moveTo(-4, 8); ctx.lineTo(0, 13); ctx.lineTo(4, 8); ctx.closePath(); ctx.fill();
+    } else if (type === 'feather') {
+      ctx.ellipse(1, -1, 4.5, 10, 0.6, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#0b1322'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(-6, 8); ctx.lineTo(6, -9); ctx.stroke();
+    } else if (type === 'wingsuit') {
+      ctx.moveTo(0, -7); ctx.lineTo(10, 6); ctx.lineTo(0, 2); ctx.lineTo(-10, 6); ctx.closePath(); ctx.fill();
+    } else if (type === 'shield') {
+      ctx.moveTo(0, -9); ctx.lineTo(8, -6); ctx.lineTo(7, 3); ctx.lineTo(0, 10); ctx.lineTo(-7, 3); ctx.lineTo(-8, -6); ctx.closePath(); ctx.fill();
+    } else if (type === 'magnet') {
+      // Horseshoe magnet with white poles.
+      ctx.lineWidth = 4.5;
+      ctx.moveTo(-6, -6); ctx.lineTo(-6, 1); ctx.arc(0, 1, 6, Math.PI, 0, true); ctx.lineTo(6, -6); ctx.stroke();
+      ctx.fillStyle = '#f1f5fb';
+      ctx.fillRect(-8.3, -10, 4.6, 4); ctx.fillRect(3.7, -10, 4.6, 4);
+    }
+  }
+
+  function drawItems() {
+    for (const item of items) {
+      const x = item.x - camera.x;
+      if (x < -40 || x > W / zoom + 40) continue;
+      const y = item.y + Math.sin(elapsed * 3 + item.bob) * 5;
+      ctx.save();
+      ctx.translate(x, y);
+      if (item.type === 'token') {
+        ctx.rotate(Math.PI / 4 + Math.sin(elapsed * 2 + item.bob) * 0.3);
+        ctx.fillStyle = '#ffd16633'; ctx.fillRect(-9, -9, 18, 18);
+        ctx.fillStyle = '#ffd166'; ctx.fillRect(-5, -5, 10, 10);
+        ctx.fillStyle = '#fff4cf'; ctx.fillRect(-5, -5, 4, 4);
+      } else {
+        const kind = ITEM_TYPES.find(entry => entry.type === item.type);
+        ctx.fillStyle = `${kind.color}30`;
+        ctx.beginPath(); ctx.arc(0, 0, 23 + Math.sin(elapsed * 5 + item.bob) * 2, 0, TAU); ctx.fill();
+        drawItemIcon(item.type, kind.color);
+      }
+      ctx.restore();
+    }
   }
 
   function drawPopups(dt) {
@@ -1052,6 +1251,12 @@
       target[other + 'Ey'] = -1;
       target[other + 'Hx'] = -side * 23;
       target[other + 'Hy'] = 7;
+    } else if (player.boostTimer > 0) {
+      target.lean = 0.9;
+      target.lKx = -3; target.lKy = 16; target.lFx = -4; target.lFy = 26;
+      target.rKx = 3; target.rKy = 16; target.rFx = 2; target.rFy = 26;
+      target.lEx = -6; target.lEy = -16; target.lHx = -2; target.lHy = -30;
+      target.rEx = 12; target.rEy = 0; target.rHx = 16; target.rHy = 10;
     } else if (player.gliding) {
       target.lean = clamp(player.vx / TUNE.maxSpeed * 0.08 - 0.06, -0.12, 0.12);
       target.lKx = -3; target.lKy = 16; target.lFx = -3; target.lFy = 26;
@@ -1112,7 +1317,7 @@
 
     if (player.gliding && !rope) {
       ctx.save(); ctx.translate(x, y + pose.crouch); ctx.rotate(angle);
-      ctx.strokeStyle = '#91eaff55'; ctx.lineWidth = 3;
+      ctx.strokeStyle = player.wingsuit ? '#ffd16699' : '#91eaff55'; ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(pose.lHx, pose.lHy);
       ctx.quadraticCurveTo(pose.lHx * 0.55, pose.lHy * 0.35 + 18, -6, 10);
@@ -1121,7 +1326,7 @@
       ctx.moveTo(pose.rHx, pose.rHy);
       ctx.quadraticCurveTo(pose.rHx * 0.55, pose.rHy * 0.35 + 18, 6, 10);
       ctx.stroke();
-      ctx.fillStyle = '#55d6ef18';
+      ctx.fillStyle = player.wingsuit ? '#ffd16640' : '#55d6ef18';
       ctx.beginPath();
       ctx.moveTo(pose.lHx, pose.lHy);
       ctx.quadraticCurveTo(pose.lHx * 0.5, pose.lHy * 0.3 + 22, 0, 12);
@@ -1146,6 +1351,28 @@
         ctx.stroke();
       }
       ctx.restore();
+    }
+
+    if (player.boostTimer > 0 && state === 'running') {
+      // Rocket flame from the boots, flickering behind the hero.
+      ctx.save(); ctx.translate(x, y + pose.crouch); ctx.rotate(angle);
+      const flicker = 16 + Math.random() * 12;
+      for (const [color, size] of [['#ff9f43cc', 1], ['#ffd166', 0.55]]) {
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.moveTo(-6 * size, 26); ctx.lineTo(0, 26 + flicker * size * 1.4); ctx.lineTo(6 * size, 26); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
+    if ((player.shield || player.invuln > 0) && state === 'running' && (player.invuln <= 0 || Math.floor(elapsed * 20) % 2)) {
+      ctx.strokeStyle = '#7ee0ffaa'; ctx.lineWidth = 2;
+      ctx.fillStyle = '#7ee0ff18';
+      ctx.beginPath(); ctx.arc(x, y + 2, 31 + Math.sin(elapsed * 4) * 1.5, 0, TAU); ctx.fill(); ctx.stroke();
+    }
+    if (player.magnetTimer > 0 && state === 'running') {
+      ctx.strokeStyle = '#ff5b6455'; ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath(); ctx.arc(x, y + 2, 40, elapsed * 2, elapsed * 2 + TAU); ctx.stroke();
+      ctx.setLineDash([]);
     }
 
     ctx.save(); ctx.translate(x, y + pose.crouch); ctx.rotate(angle);
@@ -1211,6 +1438,7 @@
     ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, 0, 0);
     drawSky();
     drawBuildings();
+    drawItems();
     drawAnchorCue();
     drawAttachEffects(dt);
     if (state !== 'dead' || player.tumbleTimer > 0) drawPlayer(dt);

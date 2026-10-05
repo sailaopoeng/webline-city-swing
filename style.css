@@ -145,6 +145,11 @@ canvas {
   border-color:#ffb3b7;
   color:#fff
 }
+.power-hud {
+  background:#5b2a12dd;
+  border-color:#ff9f4388;
+  color:#ffd3a8
+}
 .combo-hud {
   background:#5a3d0cdd;
   border-color:#ffd16688;
