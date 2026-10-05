@@ -57,6 +57,12 @@
     magnetSeconds: 8,
     magnetRange: 1.4, // attachment range multiplier
     wingsuitGlide: 0.6, // glide gravity and fall-speed factor with the wingsuit
+    // Teleport portal: at most one per level, hovering over a random gap in the first part of the level.
+    portalChance: 0.35,
+    portalPlacement: [0.25, 0.6], // fraction of the level length where it may appear
+    portalGrabRange: 300, // a web press this close grabs the portal
+    portalLanding: 2, // the hero lands this many roofs before the finish roof
+    warpSeconds: 0.45, // each half of the warp animation
   });
   const ITEM_TYPES = [
     { type: 'boots', weight: 0.24, color: '#ff9f43', label: 'ROCKET BOOTS' },
@@ -137,6 +143,7 @@
   // Points: banked from cleared levels, plus this attempt's distance and bonus points.
   let level = 1, attemptsLeft = TUNE.attemptsPerLevel, bankedPoints = 0, points = 0, levelDistance = 0, bonusPoints = 0, comboChain = 0;
   let bestPoints = 0, bestLevel = 0, gateX = Infinity, goalPlaced = false, levelResult = null, levelClearTimer = 0;
+  let portalAt = null, skippedDistance = 0; // Teleported metres do not score distance points.
   const pressedInputs = new Set();
   const webButtonInputs = new Set();
   const shortenInputs = new Set();
@@ -183,7 +190,7 @@
   function levelScaled(range) { return lerp(range[0], range[1], levelProgress()); }
   function levelLength() { return TUNE.levelBaseLength + TUNE.levelLengthStep * (Math.min(level, TUNE.levelCount) - 1); }
   function levelMultiplier() { return 1 + 0.1 * (level - 1); }
-  function runPoints() { return Math.floor(levelDistance * levelMultiplier() + bonusPoints); }
+  function runPoints() { return Math.floor(Math.max(0, levelDistance - skippedDistance) * levelMultiplier() + bonusPoints); }
   function vibrate(pattern) {
     try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (_) { /* Haptics are optional. */ }
   }
@@ -305,6 +312,7 @@
     camera = { x: 0 };
     elapsed = 0;
     levelDistance = 0;
+    skippedDistance = 0;
     bonusPoints = 0;
     comboChain = 0;
     swings = 0;
@@ -316,13 +324,14 @@
     levelClearTimer = 0;
     gateX = isEndless() ? Infinity : START_X + levelLength() * 10;
     goalPlaced = isEndless();
+    portalAt = !isEndless() && Math.random() < TUNE.portalChance ? START_X + levelLength() * 10 * rand(...TUNE.portalPlacement) : null;
     // A safe runway gives the player time to try Jump or web before the first gap.
     const startingRoof = makeBuilding(-260, 1180, H * 0.72, 0);
     const mastY = startingRoof.top - Math.min(250, H * 0.28);
     startingRoof.anchors[0] = { x: 276, y: mastY };
     startingRoof.anchors[1] = { x: startingRoof.x + startingRoof.w - 150, y: mastY };
     buildings.push(startingRoof);
-    player = { x: START_X, y: startingRoof.top - TUNE.playerRadius, px: START_X, py: startingRoof.top - TUNE.playerRadius, vx: TUNE.horizontalStartingSpeed, vy: 0, grounded: true, landingTimer: 0, tumbleTimer: 0, tumbleAngle: 0, pose: null, gliding: false, trail: [], speed: 0, dancing: false, danceTimer: 0, glideCharges: 0, glideStartX: 0, boostTimer: 0, magnetTimer: 0, shield: false, wingsuit: false, invuln: 0 };
+    player = { x: START_X, y: startingRoof.top - TUNE.playerRadius, px: START_X, py: startingRoof.top - TUNE.playerRadius, vx: TUNE.horizontalStartingSpeed, vy: 0, grounded: true, landingTimer: 0, tumbleTimer: 0, tumbleAngle: 0, pose: null, gliding: false, trail: [], speed: 0, dancing: false, danceTimer: 0, glideCharges: 0, glideStartX: 0, boostTimer: 0, magnetTimer: 0, shield: false, wingsuit: false, invuln: 0, warp: null };
     nextBuildingX = startingRoof.x + startingRoof.w + rand(...TUNE.buildingSpacing);
     generateAhead();
     updateHud();
@@ -374,8 +383,8 @@
     return { x, w: width, top, anchors, hazards, index, finish };
   }
 
-  function generateAhead() {
-    while (nextBuildingX < player.x + W * 2.5 + 500) {
+  function generateAhead(limitX = player.x + W * 2.5 + 500) {
+    while (nextBuildingX < limitX) {
       const index = buildings.length;
       let building;
       if (!goalPlaced && nextBuildingX + 635 >= gateX) {
@@ -391,15 +400,21 @@
       }
       buildings.push(building);
       const gap = rand(TUNE.buildingSpacing[0], TUNE.buildingSpacing[1]) * levelScaled(TUNE.gapScale);
-      if (index > 1 && !building.finish) placeItems(building, gap);
+      if (index > 1 && !building.finish) {
+        const portalHere = portalAt !== null && nextBuildingX + building.w + gap > portalAt;
+        if (portalHere) portalAt = null;
+        placeItems(building, gap, portalHere);
+      }
       nextBuildingX += building.w + gap;
     }
     while (items.length && items[0].x < camera.x - 300) items.shift();
     while (buildings.length > 4 && buildings[0].x + buildings[0].w < camera.x - 500) buildings.shift();
   }
 
-  function placeItems(building, gap) {
-    if (Math.random() < levelScaled(TUNE.itemChance)) {
+  function placeItems(building, gap, portalHere) {
+    if (portalHere) {
+      items.push({ x: building.x + building.w + gap * 0.5, y: clamp(building.top - rand(170, 260), H * 0.22, H - 160), type: 'portal', bob: rand(0, TAU) });
+    } else if (Math.random() < levelScaled(TUNE.itemChance)) {
       let roll = Math.random() * ITEM_TYPES.reduce((sum, item) => sum + item.weight, 0);
       let kind = ITEM_TYPES.find(item => (roll -= item.weight) < 0) || ITEM_TYPES[0];
       if (kind.type === 'wingsuit' && items.some(item => item.type === 'wingsuit')) kind = ITEM_TYPES[1];
@@ -428,7 +443,8 @@
         item.x += dx / distance * 520 * dt;
         item.y += dy / distance * 520 * dt;
       }
-      if (distance > reach) continue;
+      if (distance > reach + (item.type === 'portal' ? 8 : 0)) continue;
+      if (item.type === 'portal') { startWarp(item); return; }
       items.splice(i, 1);
       if (item.type === 'token') {
         addPoints(10, '', item.x, item.y - 12);
@@ -456,6 +472,62 @@
         player.magnetTimer = TUNE.magnetSeconds;
       }
     }
+  }
+
+  function findPortal() {
+    return items.find(item => item.type === 'portal' && item.x - camera.x > 16 && item.x - camera.x < W - 16
+      && Math.hypot(item.x - player.x, item.y - player.y) < TUNE.portalGrabRange);
+  }
+
+  // Touching or webbing the portal pulls the hero in, then drops them a couple of roofs before the finish.
+  function startWarp(item) {
+    items.splice(items.indexOf(item), 1);
+    release(false);
+    endGlide();
+    player.warp = { phase: 'out', timer: 0, x: item.x, y: item.y, startX: player.x, startY: player.y };
+    player.vx = 0;
+    player.vy = 0;
+    player.grounded = false;
+    popups.push({ x: item.x, y: item.y - 40, text: 'TELEPORT!', life: 1.2, maxLife: 1.2, color: '#d6b8ff' });
+    burst(item.x, item.y, '#c9a7ff', 22, 170);
+    flash = Math.max(flash, 0.16);
+    vibrate([30, 40, 30]);
+  }
+
+  function updateWarp(dt) {
+    const warp = player.warp;
+    warp.timer += dt;
+    const t = clamp(warp.timer / TUNE.warpSeconds, 0, 1);
+    if (warp.phase === 'out') {
+      player.x = lerp(warp.startX, warp.x, t * t);
+      player.y = lerp(warp.startY, warp.y, t * t);
+      if (Math.random() < 0.6) {
+        const angle = Math.random() * TAU;
+        particles.push({ x: warp.x + Math.cos(angle) * 40, y: warp.y + Math.sin(angle) * 40, vx: -Math.cos(angle) * 90, vy: -Math.sin(angle) * 90, life: 0.4, maxLife: 0.4, size: rand(1.5, 3), color: '#d6b8ff' });
+      }
+      if (t >= 1) {
+        generateAhead(gateX + W * 2.5);
+        const finishIndex = buildings.findIndex(b => b.finish);
+        const landing = buildings[Math.max(1, finishIndex - TUNE.portalLanding)];
+        landing.hazards = []; // Arrive on a clear roof.
+        const destX = Math.max(warp.x, landing.x + 70);
+        skippedDistance += Math.max(0, destX - player.x) / 10;
+        Object.assign(warp, { phase: 'in', timer: 0, x: destX, y: landing.top - 110 });
+        player.x = destX;
+        player.y = warp.y;
+        player.trail = [];
+        camera.x = Math.max(0, destX - W * 0.28);
+        flash = Math.max(flash, 0.22);
+        burst(destX, warp.y, '#c9a7ff', 26, 200);
+      }
+    } else if (t >= 1) {
+      player.warp = null;
+      player.vx = TUNE.horizontalStartingSpeed;
+      player.vy = 0;
+    }
+    player.px = player.x;
+    player.py = player.y;
+    levelDistance = Math.max(levelDistance, Math.max(0, player.x - START_X) / 10);
   }
 
   function canGlide() {
@@ -533,7 +605,13 @@
   }
 
   function attach() {
-    if (state !== 'running' || rope || player.boostTimer > 0) return;
+    if (state !== 'running' || rope || player.boostTimer > 0 || player.warp) return;
+    const portal = findPortal();
+    if (portal) {
+      attachEffects.push({ x: portal.x, y: portal.y, radius: 10, maxRadius: 60, life: 0.35, maxLife: 0.35, color: '#d6b8ff' });
+      startWarp(portal);
+      return;
+    }
     const point = findAnchor();
     if (!point) return;
     rope = { x: point.x, y: point.y, length: point.length * 0.985, maxLength: Math.max(TUNE.maxRopeLength, point.length) };
@@ -765,6 +843,7 @@
     bankedPoints += levelResult.total;
     bonusPoints = 0;
     levelDistance = 0;
+    skippedDistance = 0;
     points = bankedPoints;
     updateBest();
     if (level > bestLevel) { bestLevel = level; store(STORAGE.bestLevel, String(bestLevel)); }
@@ -869,6 +948,12 @@
     }
     if (state !== 'running') return;
     elapsed += dt;
+    if (player.warp) {
+      updateWarp(dt);
+      updateHud();
+      if (!player.warp) generateAhead();
+      return;
+    }
     player.landingTimer = Math.max(0, player.landingTimer - dt);
     player.boostTimer = Math.max(0, player.boostTimer - dt);
     player.magnetTimer = Math.max(0, player.magnetTimer - dt);
@@ -1078,11 +1163,46 @@
     }
   }
 
+  // A tall swirling oval; used for the hovering pickup and both ends of a warp.
+  function drawPortal(cx, cy, scale = 1) {
+    if (scale <= 0.01) return;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    const glow = ctx.createRadialGradient(0, 0, 4, 0, 0, 40);
+    glow.addColorStop(0, '#b388ff88'); glow.addColorStop(1, '#b388ff00');
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.ellipse(0, 0, 34, 42, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#12052c';
+    ctx.beginPath(); ctx.ellipse(0, 0, 11, 15, 0, 0, TAU); ctx.fill();
+    ctx.lineCap = 'round';
+    ['#c9a7ff', '#55d6ef', '#ff7ce5'].forEach((color, i) => {
+      const start = elapsed * (3 + i) * (i % 2 ? -1 : 1);
+      ctx.strokeStyle = color; ctx.lineWidth = 2.6;
+      ctx.beginPath(); ctx.ellipse(0, 0, 21 - i * 4.5, 27 - i * 5.5, 0, start, start + Math.PI * 1.35); ctx.stroke();
+    });
+    ctx.fillStyle = '#f4ecff';
+    for (let i = 0; i < 6; i++) {
+      const a = elapsed * 2.2 + i * TAU / 6;
+      ctx.beginPath(); ctx.arc(Math.cos(a) * 25, Math.sin(a) * 31, 1.4, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
   function drawItems() {
     for (const item of items) {
       const x = item.x - camera.x;
       if (x < -40 || x > W / zoom + 40) continue;
       const y = item.y + Math.sin(elapsed * 3 + item.bob) * 5;
+      if (item.type === 'portal') {
+        drawPortal(x, y);
+        ctx.fillStyle = '#d6b8ff';
+        ctx.font = '900 10px Inter, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('TELEPORT', x, y - 40);
+        ctx.textAlign = 'left';
+        continue;
+      }
       ctx.save();
       ctx.translate(x, y);
       if (item.type === 'token') {
@@ -1117,7 +1237,15 @@
   }
 
   function drawAnchorCue() {
-    if (state !== 'running' || rope) return;
+    if (state !== 'running' || rope || player.warp) return;
+    const portal = findPortal();
+    if (portal) {
+      ctx.strokeStyle = '#d6b8ffd0';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(portal.x - camera.x, portal.y, 34 + Math.sin(elapsed * 6) * 3, 0, TAU);
+      ctx.stroke();
+    }
     const anchor = findAnchor();
     if (!anchor) return;
     const radius = 10 + Math.sin(elapsed * 6) * 2;
@@ -1142,62 +1270,114 @@
     }
   }
 
-  function drawSuitLimb(sx, sy, jointX, jointY, endX, endY, width, accent) {
-    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(jointX, jointY); ctx.lineTo(endX, endY);
-    ctx.strokeStyle = '#080e19'; ctx.lineWidth = width + 2; ctx.stroke();
-    ctx.strokeStyle = '#252b36'; ctx.lineWidth = width; ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(jointX, jointY); ctx.lineTo(endX, endY);
-    ctx.strokeStyle = accent; ctx.lineWidth = width - 2; ctx.stroke();
-    ctx.fillStyle = accent; ctx.beginPath(); ctx.arc(endX, endY, width * 0.37, 0, TAU); ctx.fill();
+  // Hero suit: red mask, chest, gloves and boots with black web lines; blue arms, sides and legs.
+  const SUIT = { red: '#d42a3c', redShade: '#a51c2e', blue: '#2453bd', blueShade: '#183c8f', outline: '#090c16', web: 'rgba(25, 4, 10, 0.6)', lens: '#f4f9ff' };
+
+  function dancePose(t) {
+    const beat = Math.sin(t * 8);
+    const beat2 = Math.sin(t * 8 + Math.PI / 2);
+    return {
+      lean: beat * 0.14, crouch: Math.abs(beat) * 5,
+      lKx: -10 + beat2 * 8, lKy: 14, lFx: -12 + beat2 * 14, lFy: 24,
+      rKx: 10 - beat2 * 8, rKy: 14, rFx: 12 - beat2 * 14, rFy: 24,
+      lEx: -18, lEy: -12 + beat * 14, lHx: -26, lHy: -22 + beat * 16,
+      rEx: 18, rEy: -12 - beat * 14, rHx: 26, rHy: -22 - beat * 16,
+    };
   }
 
-  function drawDeathLimb(targetCtx, sx, sy, jointX, jointY, endX, endY, width, accent) {
-    targetCtx.beginPath(); targetCtx.moveTo(sx, sy); targetCtx.lineTo(jointX, jointY); targetCtx.lineTo(endX, endY);
-    targetCtx.strokeStyle = '#080e19'; targetCtx.lineWidth = width + 2; targetCtx.stroke();
-    targetCtx.strokeStyle = '#252b36'; targetCtx.lineWidth = width; targetCtx.stroke();
-    targetCtx.beginPath(); targetCtx.moveTo(jointX, jointY); targetCtx.lineTo(endX, endY);
-    targetCtx.strokeStyle = accent; targetCtx.lineWidth = width - 2; targetCtx.stroke();
-    targetCtx.fillStyle = accent; targetCtx.beginPath(); targetCtx.arc(endX, endY, width * 0.37, 0, TAU); targetCtx.fill();
+  // split moves the colour change below the joint (boots start partway down the shin).
+  function drawHeroLimb(c, sx, sy, jx, jy, ex, ey, width, upper, lower, split = 0) {
+    c.strokeStyle = SUIT.outline; c.lineWidth = width + 2.4;
+    c.beginPath(); c.moveTo(sx, sy); c.lineTo(jx, jy); c.lineTo(ex, ey); c.stroke();
+    const mx = lerp(jx, ex, split), my = lerp(jy, ey, split);
+    c.strokeStyle = upper; c.lineWidth = width;
+    c.beginPath(); c.moveTo(sx, sy); c.lineTo(jx, jy); c.lineTo(mx, my); c.stroke();
+    c.strokeStyle = lower;
+    c.beginPath(); c.moveTo(mx, my); c.lineTo(ex, ey); c.stroke();
+    c.fillStyle = lower; c.beginPath(); c.arc(ex, ey, width * 0.42, 0, TAU); c.fill();
+  }
+
+  // Radial spokes joined by sagging rings, clipped by the caller to the red panel.
+  function drawWebLines(c, cx, cy, radius, spokes, rings) {
+    c.strokeStyle = SUIT.web; c.lineWidth = 0.55;
+    c.beginPath();
+    for (let i = 0; i < spokes; i++) {
+      const a = i / spokes * TAU;
+      c.moveTo(cx, cy); c.lineTo(cx + Math.cos(a) * radius, cy + Math.sin(a) * radius);
+    }
+    for (let ring = 1; ring <= rings; ring++) {
+      const r = radius * ring / (rings + 0.3);
+      c.moveTo(cx + r, cy);
+      for (let i = 1; i <= spokes; i++) {
+        const a = i / spokes * TAU, mid = (i - 0.5) / spokes * TAU;
+        c.quadraticCurveTo(cx + Math.cos(mid) * r * 0.82, cy + Math.sin(mid) * r * 0.82, cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+      }
+    }
+    c.stroke();
+  }
+
+  function drawHeroArm(c, side, pose, back) {
+    const sx = side === 'l' ? -7 : 7;
+    drawHeroLimb(c, sx, -7, pose[side + 'Ex'], pose[side + 'Ey'], pose[side + 'Hx'], pose[side + 'Hy'], 6,
+      back ? SUIT.blueShade : SUIT.blue, back ? SUIT.redShade : SUIT.red);
+  }
+
+  // Draws the hero in local space (origin at the chest, head up). frontArm ('l'/'r') is drawn over the torso.
+  function drawHero(c, pose, frontArm = null) {
+    c.lineCap = 'round'; c.lineJoin = 'round';
+    drawHeroLimb(c, -4, 8, pose.lKx, pose.lKy, pose.lFx, pose.lFy, 7, SUIT.blueShade, SUIT.redShade, 0.35);
+    drawHeroLimb(c, 4, 8, pose.rKx, pose.rKy, pose.rFx, pose.rFy, 7, SUIT.blue, SUIT.red, 0.35);
+    for (const side of ['l', 'r']) if (side !== frontArm) drawHeroArm(c, side, pose, side === 'l');
+
+    c.fillStyle = SUIT.outline;
+    c.beginPath(); c.moveTo(-9.6, -11); c.lineTo(9.6, -11); c.lineTo(9.6, 7); c.lineTo(5.6, 11.6); c.lineTo(-5.6, 11.6); c.lineTo(-9.6, 7); c.closePath(); c.fill();
+    c.fillStyle = SUIT.blue;
+    c.beginPath(); c.moveTo(-8.5, -10); c.lineTo(8.5, -10); c.lineTo(6.5, 10); c.lineTo(-6.5, 10); c.closePath(); c.fill();
+    c.save();
+    c.fillStyle = SUIT.red; // Red chest and a centre panel down to the belt; blue shows at the sides.
+    c.beginPath(); c.moveTo(-8.5, -10); c.lineTo(8.5, -10); c.lineTo(7.6, -2.5); c.lineTo(3.2, 3); c.lineTo(3.6, 10); c.lineTo(-3.6, 10); c.lineTo(-3.2, 3); c.lineTo(-7.6, -2.5); c.closePath(); c.fill();
+    c.clip();
+    drawWebLines(c, 0, -4.5, 15, 10, 3);
+    c.restore();
+    c.fillStyle = SUIT.outline; // Small diamond emblem, the Webline mark.
+    c.beginPath(); c.moveTo(0, -8); c.lineTo(2, -5); c.lineTo(0, -2); c.lineTo(-2, -5); c.closePath(); c.fill();
+    c.fillStyle = SUIT.redShade; c.fillRect(-6.2, 8, 12.4, 2);
+
+    if (frontArm) drawHeroArm(c, frontArm, pose, false);
+
+    c.fillStyle = SUIT.outline; c.beginPath(); c.ellipse(0, -19, 10.4, 11.6, 0, 0, TAU); c.fill();
+    c.save();
+    c.fillStyle = SUIT.red; c.beginPath(); c.ellipse(0, -19, 9, 10.2, 0, 0, TAU); c.fill();
+    c.clip();
+    drawWebLines(c, 0, -16.5, 15, 12, 3);
+    c.fillStyle = 'rgba(255, 255, 255, 0.12)';
+    c.beginPath(); c.ellipse(-3, -24.5, 4.5, 2.6, -0.45, 0, TAU); c.fill();
+    c.restore();
+    // Large white lenses in thick black frames, narrowing toward the nose.
+    for (const dir of [-1, 1]) {
+      c.beginPath();
+      c.moveTo(dir * 1.4, -19.2);
+      c.quadraticCurveTo(dir * 4.6, -25.4, dir * 8.6, -22.6);
+      c.quadraticCurveTo(dir * 9, -16.2, dir * 3.6, -15.4);
+      c.quadraticCurveTo(dir * 1.2, -16.2, dir * 1.4, -19.2);
+      c.closePath();
+      c.fillStyle = SUIT.lens; c.fill();
+      c.strokeStyle = SUIT.outline; c.lineWidth = 1.5; c.stroke();
+    }
   }
 
   function drawDancer(c, target) {
     if (!c || !target) return;
-    const t = player.danceTimer || 0;
-    const beat = Math.sin(t * 8);
-    const beat2 = Math.sin(t * 8 + Math.PI / 2);
+    const beat = Math.sin((player.danceTimer || 0) * 8);
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.clearRect(0, 0, target.width, target.height);
     c.save();
     c.translate(target.width * 0.5, 87 + beat * 2);
     c.scale(2.08, 2.08);
     c.rotate(beat * 0.1);
-    c.lineCap = 'round';
-    c.lineJoin = 'round';
-
     c.fillStyle = '#55d6ef22';
     c.beginPath(); c.ellipse(0, 28, 24, 7, 0, 0, TAU); c.fill();
-    drawDeathLimb(c, -4, 8, -10 + beat2 * 8, 14, -12 + beat2 * 14, 24, 7, '#b93349');
-    drawDeathLimb(c, 4, 8, 10 - beat2 * 8, 14, 12 - beat2 * 14, 24, 7, '#d54353');
-    drawDeathLimb(c, -7, -7, -18, -12 + beat * 14, -26, -22 + beat * 16, 6, '#b93349');
-    drawDeathLimb(c, 7, -7, 18, -12 - beat * 14, 26, -22 - beat * 16, 6, '#b93349');
-
-    c.fillStyle = '#080e19';
-    c.beginPath(); c.moveTo(-9, -10); c.lineTo(9, -10); c.lineTo(9, 7); c.lineTo(5, 11); c.lineTo(-5, 11); c.lineTo(-9, 7); c.closePath(); c.fill();
-    c.fillStyle = '#282d37';
-    c.beginPath(); c.moveTo(-8, -9); c.lineTo(8, -9); c.lineTo(6, 9); c.lineTo(-6, 9); c.closePath(); c.fill();
-    c.fillStyle = '#c9384b';
-    c.beginPath(); c.moveTo(-7, -9); c.lineTo(7, -9); c.lineTo(5, 1); c.lineTo(0, 5); c.lineTo(-5, 1); c.closePath(); c.fill();
-    c.fillStyle = '#f05b66';
-    c.beginPath(); c.moveTo(-4, -7); c.lineTo(4, -7); c.lineTo(0, -4); c.closePath(); c.fill();
-    c.fillStyle = '#141a25'; c.fillRect(-6, 6, 12, 3);
-
-    c.fillStyle = '#080e19'; c.beginPath(); c.ellipse(0, -19, 10.5, 11.5, 0, 0, TAU); c.fill();
-    c.fillStyle = '#be3448'; c.beginPath(); c.ellipse(0, -19, 9, 10, 0, 0, TAU); c.fill();
-    c.fillStyle = '#252b36'; c.beginPath(); c.moveTo(-4, -27); c.lineTo(4, -27); c.lineTo(6, -13); c.lineTo(-6, -13); c.closePath(); c.fill();
-    c.fillStyle = '#f3fbff';
-    c.beginPath(); c.moveTo(-8, -21); c.lineTo(-2, -20); c.lineTo(-3, -16); c.lineTo(-7, -17); c.closePath(); c.fill();
-    c.beginPath(); c.moveTo(8, -21); c.lineTo(2, -20); c.lineTo(3, -16); c.lineTo(7, -17); c.closePath(); c.fill();
-    c.fillStyle = '#98e5f0'; c.fillRect(-6, -18, 2, 1); c.fillRect(4, -18, 2, 1);
+    drawHero(c, dancePose(player.danceTimer || 0));
     c.restore();
   }
 
@@ -1215,15 +1395,7 @@
     };
 
     if (player.dancing || state === 'levelclear') {
-      const t = player.danceTimer || 0;
-      const beat = Math.sin(t * 8);
-      const beat2 = Math.sin(t * 8 + Math.PI / 2);
-      target.lean = beat * 0.14;
-      target.crouch = Math.abs(beat) * 5;
-      target.lKx = -10 + beat2 * 8; target.lKy = 14; target.lFx = -12 + beat2 * 14; target.lFy = 24;
-      target.rKx = 10 - beat2 * 8; target.rKy = 14; target.rFx = 12 - beat2 * 14; target.rFy = 24;
-      target.lEx = -18; target.lEy = -12 + beat * 14; target.lHx = -26; target.lHy = -22 + beat * 16;
-      target.rEx = 18; target.rEy = -12 - beat * 14; target.rHx = 26; target.rHy = -22 - beat * 16;
+      Object.assign(target, dancePose(player.danceTimer || 0));
     } else if (state === 'dead') {
       player.tumbleAngle += dt * 9;
       target.lean = player.tumbleAngle;
@@ -1356,6 +1528,10 @@
       ctx.restore();
     }
 
+    if (player.warp) {
+      const t = clamp(player.warp.timer / TUNE.warpSeconds, 0, 1);
+      drawPortal(player.warp.x - camera.x, player.warp.y, player.warp.phase === 'out' ? 1 + t * 0.3 : (1 - t) * 1.3);
+    }
     if (player.boostTimer > 0 && state === 'running') {
       // Rocket flame from the boots, flickering behind the hero.
       ctx.save(); ctx.translate(x, y + pose.crouch); ctx.rotate(angle);
@@ -1380,34 +1556,20 @@
 
     ctx.save(); ctx.translate(x, y + pose.crouch); ctx.rotate(angle);
     if (player.dancing) { ctx.translate(0, 26); ctx.scale(1.6, 1.6); ctx.translate(0, -26); }
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (player.warp) {
+      // Spin and shrink into the portal, then grow back out at the far end.
+      const t = clamp(player.warp.timer / TUNE.warpSeconds, 0, 1);
+      const size = player.warp.phase === 'out' ? 1 - t : t;
+      ctx.translate(0, 10);
+      ctx.rotate((player.warp.phase === 'out' ? t : t - 1) * TAU * 1.5);
+      ctx.scale(size, size);
+      ctx.translate(0, -10);
+    }
     if (player.dancing) {
       ctx.fillStyle = 'rgba(145,234,255,0.22)';
       ctx.beginPath(); ctx.ellipse(0, 28, 24, 7, 0, 0, TAU); ctx.fill();
     }
-    drawSuitLimb(-4, 8, pose.lKx, pose.lKy, pose.lFx, pose.lFy, 7, '#b93349');
-    drawSuitLimb(4, 8, pose.rKx, pose.rKy, pose.rFx, pose.rFy, 7, '#d54353');
-    if (!rope || reachingSide !== 'l') drawSuitLimb(-7, -7, pose.lEx, pose.lEy, pose.lHx, pose.lHy, 6, '#b93349');
-    if (!rope || reachingSide !== 'r') drawSuitLimb(7, -7, pose.rEx, pose.rEy, pose.rHx, pose.rHy, 6, '#b93349');
-
-    // Dark side panels frame one bright, angular chest panel at small sizes.
-    ctx.fillStyle = '#080e19'; ctx.beginPath(); ctx.moveTo(-9, -10); ctx.lineTo(9, -10); ctx.lineTo(9, 7); ctx.lineTo(5, 11); ctx.lineTo(-5, 11); ctx.lineTo(-9, 7); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#282d37'; ctx.beginPath(); ctx.moveTo(-8, -9); ctx.lineTo(8, -9); ctx.lineTo(6, 9); ctx.lineTo(-6, 9); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#c9384b'; ctx.beginPath(); ctx.moveTo(-7, -9); ctx.lineTo(7, -9); ctx.lineTo(5, 1); ctx.lineTo(0, 5); ctx.lineTo(-5, 1); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#f05b66'; ctx.beginPath(); ctx.moveTo(-4, -7); ctx.lineTo(4, -7); ctx.lineTo(0, -4); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#141a25'; ctx.fillRect(-6, 6, 12, 3);
-
-    if (rope && reachingSide === 'l') drawSuitLimb(-7, -7, pose.lEx, pose.lEy, pose.lHx, pose.lHy, 6, '#ec5362');
-    if (rope && reachingSide === 'r') drawSuitLimb(7, -7, pose.rEx, pose.rEy, pose.rHx, pose.rHy, 6, '#ec5362');
-
-    // Full-face mask with large angled eyes; no tiny lines needed to read the face.
-    ctx.fillStyle = '#080e19'; ctx.beginPath(); ctx.ellipse(0, -19, 10.5, 11.5, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#be3448'; ctx.beginPath(); ctx.ellipse(0, -19, 9, 10, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#252b36'; ctx.beginPath(); ctx.moveTo(-4, -27); ctx.lineTo(4, -27); ctx.lineTo(6, -13); ctx.lineTo(-6, -13); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#f3fbff';
-    ctx.beginPath(); ctx.moveTo(-8, -21); ctx.lineTo(-2, -20); ctx.lineTo(-3, -16); ctx.lineTo(-7, -17); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(8, -21); ctx.lineTo(2, -20); ctx.lineTo(3, -16); ctx.lineTo(7, -17); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#98e5f0'; ctx.fillRect(-6, -18, 2, 1); ctx.fillRect(4, -18, 2, 1);
+    drawHero(ctx, pose, rope ? reachingSide : null);
     ctx.restore();
   }
 

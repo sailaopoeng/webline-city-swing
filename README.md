@@ -19,7 +19,7 @@ Webline is a fast, momentum-driven rooftop swinging game built with plain HTML, 
 - 100 levels across ten city districts, each about 1% harder, then an endless mode
 - Finish gates, level-clear celebration with stars, and five attempts per level
 - Points from distance × level, web combos, near misses, glides, and tokens
-- Power-ups: Rocket Boots, Glide Feather, Wingsuit, Shield, and Web Magnet
+- Power-ups: Rocket Boots, Glide Feather, Wingsuit, Shield, Web Magnet, and a rare teleport portal
 - Procedurally generated rooftops, gaps, mast nodes, and spike clusters
 - Jumping, rope length control, swing pumping, and stored glide charges with auto-glide
 - Responsive keyboard, mouse, touch, and on-screen mobile controls
@@ -55,6 +55,7 @@ Points = distance × level multiplier + bonuses (web combos, near misses over sp
 | Wingsuit | Longer, flatter glides for the rest of the level |
 | Shield | Survive one spike or wall hit |
 | Web Magnet | Longer web reach and token pull for 8 seconds |
+| Teleport portal | Rare. Touch it or web it to warp to a couple of roofs before the finish (skipped distance earns no points) |
 | Token | Points |
 
 ## Run locally
